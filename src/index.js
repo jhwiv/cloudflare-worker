@@ -1,5 +1,5 @@
 // Zürich Trip Chat Concierge — Cloudflare Worker
-// Uses Cloudflare Workers AI (no external API key required) + Open-Meteo (weather)
+// Uses Cloudflare Workers AI (streaming) + Open-Meteo (weather)
 
 // ── CORS helpers ───────────────────────────────────────
 const CORS_HEADERS = {
@@ -124,21 +124,6 @@ YOUR ROLE:
 - DO NOT make up information. If you don't know, say so.`;
 }
 
-// ── Workers AI call ────────────────────────────────────
-async function callWorkersAI(ai, systemPrompt, messages) {
-  const aiMessages = [
-    { role: 'system', content: systemPrompt },
-    ...messages,
-  ];
-
-  const response = await ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages: aiMessages,
-    max_tokens: 800,
-  });
-
-  return response.response;
-}
-
 // ── Main fetch handler ─────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -154,7 +139,7 @@ export default {
       return corsResponse({ status: 'ok', time: new Date().toISOString() });
     }
 
-    // Chat endpoint
+    // Chat endpoint — streaming via SSE
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       try {
         const { message, lat, lng, history } = await request.json();
@@ -182,15 +167,29 @@ export default {
         const systemPrompt = buildSystemPrompt(zurichWx, copenhagenWx, locationNote);
 
         // Build messages array
-        const msgs = [];
+        const msgs = [{ role: 'system', content: systemPrompt }];
         if (history && Array.isArray(history)) {
           for (const h of history.slice(-8))
             msgs.push({ role: h.role, content: h.content });
         }
         msgs.push({ role: 'user', content: message });
 
-        const reply = await callWorkersAI(env.AI, systemPrompt, msgs);
-        return corsResponse({ reply });
+        // Stream from Workers AI
+        const stream = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fast', {
+          messages: msgs,
+          max_tokens: 800,
+          stream: true,
+        });
+
+        // Return SSE stream to client
+        return new Response(stream, {
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
 
       } catch (err) {
         console.error('Chat error:', err);
