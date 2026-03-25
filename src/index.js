@@ -1,5 +1,6 @@
-// Zürich Trip Chat Concierge — Cloudflare Worker
+// Multi-Site Trip Chat Concierge — Cloudflare Worker
 // Uses Cloudflare Workers AI (streaming) + Open-Meteo (weather)
+// Routes: /api/chat/zurich and /api/chat/maritimes
 
 // ── CORS helpers ───────────────────────────────────────
 const CORS_HEADERS = {
@@ -77,39 +78,43 @@ async function getWeather(lat, lng, tz) {
   } catch { return null; }
 }
 
-// ── System prompt builder ──────────────────────────────
-function buildSystemPrompt(zurichWx, copenhagenWx, locationNote) {
-  const now = new Date();
-  const localZurich = now.toLocaleString('en-US', {
-    timeZone: 'Europe/Zurich', weekday: 'long', year: 'numeric',
-    month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-
-  let wxSummary = '';
-  if (zurichWx) {
-    wxSummary += `\n\nCURRENT ZÜRICH WEATHER: ${zurichWx.current.temp}°F, ${zurichWx.current.condition}, Wind ${zurichWx.current.windMph} mph, Humidity ${zurichWx.current.humidity}%.`;
-    if (zurichWx.hourly.length > 0) {
-      wxSummary += '\nNEXT HOURS:';
-      for (const h of zurichWx.hourly)
-        wxSummary += `\n  ${h.hour}:00 — ${h.temp}°F, ${h.condition}, ${h.rainChance}% rain, Wind ${h.windMph} mph`;
-    }
-    if (zurichWx.daily.length > 0) {
-      wxSummary += '\nDAILY FORECAST:';
-      for (const d of zurichWx.daily)
-        wxSummary += `\n  ${d.date}: Hi ${d.hi}°F / Lo ${d.lo}°F, ${d.condition}, ${d.rainChance}% rain`;
-    }
+function formatWeather(wx, label) {
+  if (!wx) return '';
+  let s = `\n\n${label} WEATHER: ${wx.current.temp}°F, ${wx.current.condition}, Wind ${wx.current.windMph} mph, Humidity ${wx.current.humidity}%.`;
+  if (wx.hourly.length > 0) {
+    s += '\nNEXT HOURS:';
+    for (const h of wx.hourly)
+      s += `\n  ${h.hour}:00 — ${h.temp}°F, ${h.condition}, ${h.rainChance}% rain, Wind ${h.windMph} mph`;
   }
-  if (copenhagenWx)
-    wxSummary += `\n\nCOPENHAGEN: ${copenhagenWx.current.temp}°F, ${copenhagenWx.current.condition}.`;
+  if (wx.daily.length > 0) {
+    s += '\nDAILY FORECAST:';
+    for (const d of wx.daily)
+      s += `\n  ${d.date}: Hi ${d.hi}°F / Lo ${d.lo}°F, ${d.condition}, ${d.rainChance}% rain`;
+  }
+  return s;
+}
 
-  return `You are a knowledgeable, friendly travel concierge for a Zürich & Copenhagen trip (26–29 March 2026). You are embedded in the trip's PWA guide.
+// ── Site configurations ────────────────────────────────
+const SITES = {
+  zurich: {
+    weatherLocations: [
+      { lat: 47.3769, lng: 8.5417, tz: 'Europe/Zurich', label: 'ZÜRICH' },
+      { lat: 55.6761, lng: 12.5683, tz: 'Europe/Copenhagen', label: 'COPENHAGEN' },
+    ],
+    geoChecks: [
+      { lat: 47.3769, lng: 8.5417, radius: 0.5, label: 'They appear to be IN Zürich right now.' },
+      { lat: 55.6761, lng: 12.5683, radius: 0.5, label: 'They appear to be IN Copenhagen right now.' },
+    ],
+    defaultGeoNote: 'They are NOT currently in Zürich or Copenhagen — they may be planning ahead.',
+    localTimezone: 'Europe/Zurich',
+    buildPrompt: (wxSummary, locationNote, localTime) => `You are a knowledgeable, friendly travel concierge for a Zürich & Copenhagen trip (26–29 March 2026). You are embedded in the trip's PWA guide.
 
-CURRENT DATE/TIME (Zürich): ${localZurich}
+CURRENT DATE/TIME (Zürich): ${localTime}
 ${locationNote}
 ${wxSummary}
 
 FULL ITINERARY:
-${ITINERARY_JSON}
+${ZURICH_ITINERARY}
 
 YOUR ROLE:
 - Help the traveler decide what to do next based on: the itinerary, current time, weather, and their location.
@@ -121,13 +126,49 @@ YOUR ROLE:
 - Keep answers concise — 2-4 short paragraphs max. Use natural language, not bullet lists.
 - You can respond in English or match the traveler's language.
 - If they ask about something not in the itinerary, give helpful local advice but note it's outside the planned itinerary.
-- DO NOT make up information. If you don't know, say so.`;
-}
+- DO NOT make up information. If you don't know, say so.`,
+  },
+
+  maritimes: {
+    weatherLocations: [
+      { lat: 43.6591, lng: -70.2568, tz: 'America/New_York', label: 'PORTLAND ME' },
+      { lat: 49.4817, lng: -54.7831, tz: 'America/St_Johns', label: 'FOGO ISLAND' },
+    ],
+    geoChecks: [
+      { lat: 43.6591, lng: -70.2568, radius: 0.5, label: 'They appear to be IN Portland, ME right now.' },
+      { lat: 44.3890, lng: -64.5205, tz: 'America/Halifax', radius: 0.5, label: 'They appear to be near Lunenburg, NS right now.' },
+      { lat: 49.4817, lng: -54.7831, radius: 0.8, label: 'They appear to be on Fogo Island right now.' },
+      { lat: 45.9636, lng: -66.6431, radius: 0.5, label: 'They appear to be in Fredericton, NB right now.' },
+    ],
+    defaultGeoNote: 'They are NOT currently near any of the itinerary stops — they may be planning ahead.',
+    localTimezone: 'America/New_York',
+    buildPrompt: (wxSummary, locationNote, localTime) => `You are a knowledgeable, friendly travel concierge for a 12-day Maritimes Grand Loop road trip (Newfoundland & Nova Scotia, Summer 2026). You are embedded in the trip's PWA guide.
+
+CURRENT DATE/TIME: ${localTime}
+${locationNote}
+${wxSummary}
+
+FULL ITINERARY:
+${MARITIMES_ITINERARY}
+
+YOUR ROLE:
+- Help the travelers decide what to do next based on: the itinerary, current time, weather, and their location.
+- Be specific — use place names, driving distances, ferry times, and hotel names from the itinerary.
+- For ferry crossings: remind them of departure times and that they should arrive early.
+- For Fogo Island days (6–8): suggest activities, hikes, and local experiences.
+- Reference hotels by name and location.
+- For driving days: mention approximate drive times and suggested stops.
+- Keep answers concise — 2-4 short paragraphs max. Use natural language, not bullet lists.
+- You can respond in English or match the traveler's language.
+- The travelers are a group including Molly and Bonie.
+- If they ask about something not in the itinerary, give helpful local advice but note it's outside the planned itinerary.
+- DO NOT make up information. If you don't know, say so.`,
+  },
+};
 
 // ── Main fetch handler ─────────────────────────────────
 export default {
   async fetch(request, env) {
-    // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
     }
@@ -139,32 +180,52 @@ export default {
       return corsResponse({ status: 'ok', time: new Date().toISOString() });
     }
 
-    // Chat endpoint — streaming via SSE
-    if (url.pathname === '/api/chat' && request.method === 'POST') {
+    // Chat endpoints: /api/chat/zurich or /api/chat/maritimes
+    // Also support legacy /api/chat (defaults to zurich)
+    const chatMatch = url.pathname.match(/^\/api\/chat(?:\/(zurich|maritimes))?$/);
+    if (chatMatch && request.method === 'POST') {
+      const siteKey = chatMatch[1] || 'zurich';
+      const site = SITES[siteKey];
+
       try {
         const { message, lat, lng, history } = await request.json();
         if (!message || typeof message !== 'string') {
           return corsResponse({ error: 'Missing message' }, 400);
         }
 
-        // Get weather for both cities in parallel
-        const [zurichWx, copenhagenWx] = await Promise.all([
-          getWeather(47.3769, 8.5417, 'Europe/Zurich'),
-          getWeather(55.6761, 12.5683, 'Europe/Copenhagen'),
-        ]);
+        // Get weather for this site's locations
+        const weatherResults = await Promise.all(
+          site.weatherLocations.map(loc => getWeather(loc.lat, loc.lng, loc.tz))
+        );
+        let wxSummary = '';
+        for (let i = 0; i < weatherResults.length; i++) {
+          if (weatherResults[i]) {
+            wxSummary += formatWeather(weatherResults[i], site.weatherLocations[i].label);
+          }
+        }
 
         // Location context
         let locationNote = '';
         if (lat && lng) {
-          const dZ = Math.hypot(lat - 47.3769, lng - 8.5417);
-          const dC = Math.hypot(lat - 55.6761, lng - 12.5683);
           locationNote = `User's current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}. `;
-          if (dZ < 0.5) locationNote += 'They appear to be IN Zürich right now. ';
-          else if (dC < 0.5) locationNote += 'They appear to be IN Copenhagen right now. ';
-          else locationNote += 'They are NOT currently in Zürich or Copenhagen — they may be planning ahead. ';
+          let matched = false;
+          for (const check of site.geoChecks) {
+            if (Math.hypot(lat - check.lat, lng - check.lng) < check.radius) {
+              locationNote += check.label;
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) locationNote += site.defaultGeoNote;
         }
 
-        const systemPrompt = buildSystemPrompt(zurichWx, copenhagenWx, locationNote);
+        const now = new Date();
+        const localTime = now.toLocaleString('en-US', {
+          timeZone: site.localTimezone, weekday: 'long', year: 'numeric',
+          month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+        });
+
+        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime);
 
         // Build messages array
         const msgs = [{ role: 'system', content: systemPrompt }];
@@ -181,7 +242,6 @@ export default {
           stream: true,
         });
 
-        // Return SSE stream to client
         return new Response(stream, {
           headers: {
             ...CORS_HEADERS,
@@ -197,13 +257,12 @@ export default {
       }
     }
 
-    // Fallback
     return corsResponse({ error: 'Not found' }, 404);
   },
 };
 
-// ── Itinerary data (inlined) ───────────────────────────
-const ITINERARY_JSON = `{
+// ── ZÜRICH ITINERARY ───────────────────────────────────
+const ZURICH_ITINERARY = `{
   "trip": {
     "title": "Zürich · March 2026",
     "dates": "26–29 March 2026",
@@ -216,74 +275,173 @@ const ITINERARY_JSON = `{
     {
       "id": "denmark", "label": "Copenhagen Stopover", "dateRange": "Wed 25 – Fri 27 March",
       "stops": [
-        { "time": "Wed Night", "title": "Departure → Copenhagen ✈", "desc": "Overnight flight. Arrive CPH Thu 7 AM." },
+        { "time": "Wed Night", "title": "Departure → Copenhagen", "desc": "Overnight flight. Arrive CPH Thu 7 AM." },
         { "time": "7:00 AM Thu", "title": "Arrive CPH → Scandic Nørreport", "desc": "Metro M2 Terminal 3 → Nørreport 13 min, 30 DKK. Hotel across the street." },
         { "time": "Hotel", "title": "Scandic Nørreport", "desc": "4-star, rooftop bar Level Six, free happy hour 4–5 PM. +45 7231 5001." },
         { "time": "Charlotte", "title": "Charlotte's Place · Amager", "desc": "Holmbladsgade 70B. M2 → Amagerbro 15 min from hotel." },
-        { "time": "Fri Evening", "title": "CPH → ZRH ✈", "desc": "Fly Friday evening. M2 to airport 13 min." }
+        { "time": "Fri Evening", "title": "CPH → ZRH", "desc": "Fly Friday evening. M2 to airport 13 min." }
       ]
     },
     {
       "id": "friday", "label": "Day 1 · Friday 27 March", "title": "Arrival & White Elephant",
       "stops": [
         { "time": "7:40 PM", "title": "Airport → Marriott", "desc": "Airport Express + Tram 13. Arrive ~8:30–8:45 PM." },
-        { "time": "9:00 PM", "title": "Dinner: White Elephant", "desc": "Hotel's Michelin-listed Thai. +41 44 360 73 22. 🌿 Vegetarian." },
-        { "time": "10:30 PM", "title": "Lenox Bar Nightcap", "desc": "Hotel bar. Optional.", "optional": true }
-      ],
-      "extras": "Limmat riverfront walk — lit bridges, 5 min from hotel."
+        { "time": "9:00 PM", "title": "Dinner: White Elephant", "desc": "Hotel's Michelin-listed Thai. +41 44 360 73 22." },
+        { "time": "10:30 PM", "title": "Lenox Bar Nightcap", "desc": "Hotel bar. Optional." }
+      ]
     },
     {
-      "id": "saturday", "label": "Day 2 · Saturday 28 March — The Big Day",
-      "summary": "Uetliberg → Sprüngli → Kunsthaus → Old Town → Lindenhof → aperitivo → Zeughauskeller. Leave hotel 10 AM.",
+      "id": "saturday", "label": "Day 2 · Saturday 28 March",
+      "summary": "Uetliberg → Sprüngli → Kunsthaus → Old Town → Lindenhof → aperitivo → Zeughauskeller.",
       "stops": [
-        { "time": "10:00 AM", "title": "Uetliberg Summit 871m", "desc": "S10 from HB 20 min. Zürich Card ✓. ⚠️ Felsenegg cable car CLOSED 2 Mar–10 Apr.", "alt": { "foggy": "Polybahn + ETH Terrace — 90-sec funicular, great rooftop views.", "rainy": "Landesmuseum — behind HB, free with Zürich Card, Sat 10–5." } },
-        { "time": "12:45 PM", "title": "Café Sprüngli", "desc": "Legendary confiserie since 1836. Bahnhofstrasse 21. Hot chocolate, Luxemburgerli." },
-        { "time": "1:30 PM", "title": "Kunsthaus Zürich", "desc": "Largest Swiss art museum. Heimplatz 1. Bührle, Munch, Giacometti. Free w/ Zürich Card. Sat 10–6." },
-        { "time": "3:00 PM", "title": "Lunch: Kunsthaus Café", "desc": "On-site. Soups, salads. Sat 9–9." },
-        { "time": "4:15 PM", "title": "Old Town — Augustinergasse & Cathedrals", "desc": "Grossmünster, Fraumünster (Chagall glass), Münsterhof. Free entry." },
-        { "time": "5:45 PM", "title": "Lindenhof Hill", "desc": "Panorama, Roman fort park, public chess. 5 min from Fraumünster." },
+        { "time": "10:00 AM", "title": "Uetliberg Summit", "desc": "S10 from HB 20 min. Zürich Card. Felsenegg cable car CLOSED 2 Mar–10 Apr.", "alt": { "foggy": "Polybahn + ETH Terrace", "rainy": "Landesmuseum — free with Zürich Card, Sat 10–5." } },
+        { "time": "12:45 PM", "title": "Café Sprüngli", "desc": "Bahnhofstrasse 21. Hot chocolate, Luxemburgerli." },
+        { "time": "1:30 PM", "title": "Kunsthaus Zürich", "desc": "Heimplatz 1. Free w/ Zürich Card. Sat 10–6." },
+        { "time": "3:00 PM", "title": "Lunch: Kunsthaus Café", "desc": "On-site. Sat 9–9." },
+        { "time": "4:15 PM", "title": "Old Town", "desc": "Grossmünster, Fraumünster (Chagall glass), Münsterhof." },
+        { "time": "5:45 PM", "title": "Lindenhof Hill", "desc": "Panorama, Roman fort park. 5 min from Fraumünster." },
         { "time": "6:30 PM", "title": "Café Bar Münsterhof", "desc": "Pre-dinner drinks. Münsterhof 6." },
-        { "time": "7:30 PM", "title": "Dinner: Zeughauskeller ★ CONFIRMED", "desc": "15th-c beer hall. Bahnhofstrasse 28A. +41 44 220 15 15. CHF 35–55 pp." }
-      ],
-      "extras": "Niederdorf lanes, Cabaret Voltaire, Beyer Watch Museum."
+        { "time": "7:30 PM", "title": "Dinner: Zeughauskeller CONFIRMED", "desc": "Bahnhofstrasse 28A. +41 44 220 15 15. CHF 35–55 pp." }
+      ]
     },
     {
       "id": "sunday", "label": "Day 3 · Sunday 29 March · Palm Sunday",
       "summary": "Leave hotel by 6:00 PM. Full city window 10 AM–4:30 PM.",
       "stops": [
-        { "time": "10:00 AM", "title": "Hiltl Brunch", "desc": "World's oldest veggie restaurant. Sihlstrasse 28. CHF 57 pp. 100+ dishes." },
-        { "time": "11:15 AM", "title": "Lake Zürich Promenade", "desc": "Quaianlagen from Bürkliplatz. Free." },
-        { "time": "11:45 AM", "title": "Lake Cruise (optional)", "desc": "ZSG Rundfahrt ~40 min. Zürich Card ✓.", "optional": true },
-        { "time": "Bonus", "title": "Polybahn (optional)", "desc": "Historic funicular 90 sec. ETH views. Zürich Card ✓.", "optional": true },
-        { "time": "1:00 PM", "title": "Lunch: Fischerstube Zürihorn", "desc": "Lakeside terrace. Bellerivestrasse 160. +41 44 422 25 20. CHF 35–50." },
-        { "time": "2:30 PM", "title": "Museum Rietberg", "desc": "Asian/African art. Gablerstrasse 15. Free w/ Zürich Card. Sun 10–5." },
-        { "time": "5:15 PM", "title": "Farewell Dinner: eCHo", "desc": "Hotel Swiss restaurant. +41 44 360 73 18. Finish by 6 PM." },
-        { "time": "6:00 PM", "title": "DEPART for ZRH", "desc": "Walk 5 min to HB → Airport Express 25 min → ZRH 6:30 PM. Flight 8:25 PM.", "critical": true }
+        { "time": "10:00 AM", "title": "Hiltl Brunch", "desc": "Sihlstrasse 28. CHF 57 pp." },
+        { "time": "11:15 AM", "title": "Lake Zürich Promenade", "desc": "Quaianlagen from Bürkliplatz." },
+        { "time": "11:45 AM", "title": "Lake Cruise (optional)", "desc": "ZSG ~40 min. Zürich Card." },
+        { "time": "1:00 PM", "title": "Lunch: Fischerstube Zürihorn", "desc": "Bellerivestrasse 160. +41 44 422 25 20." },
+        { "time": "2:30 PM", "title": "Museum Rietberg", "desc": "Gablerstrasse 15. Free w/ Zürich Card. Sun 10–5." },
+        { "time": "5:15 PM", "title": "Farewell Dinner: eCHo", "desc": "Hotel restaurant. Finish by 6 PM." },
+        { "time": "6:00 PM", "title": "DEPART for ZRH", "desc": "Walk to HB → Airport Express 25 min. Flight 8:25 PM.", "critical": true }
       ],
-      "warnings": ["All shops closed Sunday. Buy Saturday before 6 PM.", "Palm Sunday — Old Town processions.", "Leave hotel by 6:00 PM."]
+      "warnings": ["All shops closed Sunday.", "Palm Sunday — Old Town processions.", "Leave hotel by 6:00 PM."]
     }
   ],
   "dining": [
-    { "time": "Fri 9 PM", "venue": "White Elephant", "status": "Recommended", "phone": "+41 44 360 73 22" },
+    { "time": "Fri 9 PM", "venue": "White Elephant", "status": "Recommended" },
     { "time": "Sat 12:45", "venue": "Sprüngli", "status": "Walk-in" },
-    { "time": "Sat 3 PM", "venue": "Kunsthaus Café", "status": "Walk-in" },
-    { "time": "Sat 6:30", "venue": "Café Bar Münsterhof", "status": "Walk-in" },
-    { "time": "Sat 7:30", "venue": "Zeughauskeller ★", "status": "✓ Confirmed", "phone": "+41 44 220 15 15" },
+    { "time": "Sat 7:30", "venue": "Zeughauskeller", "status": "Confirmed" },
     { "time": "Sun 10 AM", "venue": "Hiltl", "status": "Walk-in, arrive early" },
-    { "time": "Sun 1 PM", "venue": "Fischerstube", "status": "Recommended", "phone": "+41 44 422 25 20" },
-    { "time": "Sun 5:15", "venue": "eCHo", "status": "Book via hotel", "phone": "+41 44 360 73 18" }
+    { "time": "Sun 1 PM", "venue": "Fischerstube", "status": "Recommended" },
+    { "time": "Sun 5:15", "venue": "eCHo", "status": "Book via hotel" }
+  ]
+}`;
+
+// ── MARITIMES ITINERARY ────────────────────────────────
+const MARITIMES_ITINERARY = `{
+  "trip": {
+    "title": "Newfoundland & Nova Scotia · Summer 2026",
+    "duration": "12 days",
+    "travelers": "Group including Molly & Bonie",
+    "startEnd": "Portland, ME (round trip)",
+    "totalDistance": "~4,000 km",
+    "ferryCrossings": 3
+  },
+  "hotels": [
+    { "nights": "1 & 12", "location": "Portland, ME", "name": "Courtyard Marriott", "address": "321 Commercial St" },
+    { "nights": "2", "location": "Digby, NS", "name": "Fundy Complex Dockside", "address": "34 Water St" },
+    { "nights": "3", "location": "Lunenburg, NS", "name": "Smugglers Cove Inn", "address": "139 Montague St" },
+    { "nights": "5", "location": "Twillingate, NL", "name": "Anchor Inn Hotel", "address": "3 Path End" },
+    { "nights": "6–8", "location": "Fogo Island, NL", "name": "Fogo Island Inn", "address": "Joe Batt's Arm" },
+    { "nights": "10", "location": "Pictou, NS", "name": "The Scotsman Inn", "address": "78 Coleraine St", "phone": "902-485-1924" },
+    { "nights": "11", "location": "Fredericton, NB", "name": "Delta Hotels Marriott", "address": "225 Woodstock Rd" }
   ],
-  "budget": "CHF 260–325 pp total",
-  "transit": [
-    { "dest": "Hotel from Airport", "via": "Airport Express + Tram 13", "time": "30–40 min" },
-    { "dest": "Uetliberg", "via": "S10 from HB", "time": "20 min" },
-    { "dest": "Sprüngli", "via": "Walk or Tram 13 → Paradeplatz", "time": "12/5 min" },
-    { "dest": "Kunsthaus", "via": "Tram 3 → Kunsthaus", "time": "11 min" },
-    { "dest": "Old Town", "via": "Walk via Grossmünster", "time": "15 min" },
-    { "dest": "Zeughauskeller", "via": "Walk from Münsterhof", "time": "3 min" },
-    { "dest": "Hotel after dinner", "via": "Tram 13 → Sihlquai/HB", "time": "5 min" },
-    { "dest": "Fischerstube", "via": "Tram 2 → Zürichhorn", "time": "10 min" },
-    { "dest": "Rietberg", "via": "Tram 7 or Uber", "time": "16 min" },
-    { "dest": "ZRH Airport", "via": "Airport Express from HB", "time": "25 min" }
+  "days": [
+    {
+      "day": 1, "label": "Portland",
+      "stops": [
+        { "time": "Afternoon", "title": "Meet Molly & Bonie", "desc": "Arrive in Portland. Stroll the Old Port — cobblestone streets, galleries, waterfront." },
+        { "time": "Evening", "title": "Dinner in Portland", "desc": "Fresh seafood, farm-to-table, craft breweries." }
+      ]
+    },
+    {
+      "day": 2, "label": "Portland → Saint John → Digby",
+      "stops": [
+        { "time": "Morning", "title": "Drive: Portland → Saint John, NB", "desc": "~4.5-hour drive north through Maine into New Brunswick. Border at Calais/St. Stephen. Passports needed." },
+        { "time": "En Route", "title": "Suggested Stops", "desc": "Coffee in Bangor, ME (~2 hrs). After border, St. Andrews by-the-Sea — charming seaside town." },
+        { "time": "2:15 PM AT", "title": "Fundy Rose Ferry", "desc": "Board ferry for 2.5-hour Bay of Fundy crossing. Arrive Digby ~4:45 PM Atlantic Time." },
+        { "time": "~5:00 PM", "title": "Arrive Digby", "desc": "Scallop capital of the world. Walk the waterfront." }
+      ]
+    },
+    {
+      "day": 3, "label": "Digby → Lunenburg",
+      "stops": [
+        { "time": "Morning", "title": "Scenic Drive — South Shore", "desc": "~2.5 hours along the Lighthouse Route through fishing villages." },
+        { "time": "Afternoon", "title": "Explore Lunenburg", "desc": "UNESCO World Heritage Site. Colourful harbour, Fisheries Museum, Bluenose II." }
+      ]
+    },
+    {
+      "day": 4, "label": "Lunenburg → North Sydney → Overnight Ferry",
+      "stops": [
+        { "time": "8:00 AM", "title": "Early Start", "desc": "~4.5-hour drive to North Sydney, Cape Breton. Longest driving day." },
+        { "time": "Evening", "title": "Overnight Ferry to Newfoundland", "desc": "Marine Atlantic ferry, 6–8 hour crossing. Cabin booked." }
+      ]
+    },
+    {
+      "day": 5, "label": "Port aux Basques → Twillingate",
+      "stops": [
+        { "time": "Morning", "title": "Arrive Port aux Basques", "desc": "Begin drive east across Newfoundland on the Trans-Canada." },
+        { "time": "Mid-Morning", "title": "Corner Brook", "desc": "~2.5 hrs from Port aux Basques. Captain Cook's Lookout — panoramic Bay of Islands views." },
+        { "time": "Lunch", "title": "Deer Lake", "desc": "Halfway point. Natural lunch stop." },
+        { "time": "Evening", "title": "Arrive Twillingate", "desc": "Iceberg Capital of the World. Massive icebergs from Greenland drift past." }
+      ]
+    },
+    {
+      "day": "6–8", "label": "Fogo Island",
+      "stops": [
+        { "time": "Day 6 Morning", "title": "Ferry to Fogo Island", "desc": "Drive Twillingate to Farewell, ~45 min ferry through iceberg waters." },
+        { "time": "Day 6", "title": "Check In — Fogo Island Inn", "desc": "Architecturally stunning hotel on stilts at the North Atlantic edge. Designed by Todd Saunders. Every room faces the sea." },
+        { "time": "Days 6–8", "title": "Explore Fogo Island", "desc": "3 full days. Visit Fogo Island Studios (artist residencies), hike coastal trails, meet local fishers, see icebergs. The inn offers community-host programs, boat tours, and foraging excursions. All profits return to the community." }
+      ]
+    },
+    {
+      "day": 9, "label": "Fogo → Port aux Basques (Return Ferry)",
+      "stops": [
+        { "time": "Morning", "title": "Ferry back to mainland", "desc": "~45 min crossing." },
+        { "time": "All Day", "title": "Drive: Farewell → Port aux Basques", "desc": "~560 km, ~6.5 hours. Grand Falls-Windsor (~2.5 hrs) for the Gorge. Deer Lake (~4.5 hrs) for lunch." },
+        { "time": "Evening", "title": "Overnight Ferry to Nova Scotia", "desc": "Another night sleeping on the water." }
+      ]
+    },
+    {
+      "day": 10, "label": "North Sydney → Pictou",
+      "stops": [
+        { "time": "Morning", "title": "Arrive North Sydney", "desc": "Disembark ferry." },
+        { "time": "Afternoon", "title": "Explore Pictou", "desc": "Birthplace of New Scotland — first Scottish settlers landed 1773. Ship Hector Heritage Quay." }
+      ]
+    },
+    {
+      "day": 11, "label": "Pictou → Fredericton",
+      "stops": [
+        { "time": "Morning", "title": "Drive: Pictou → Fredericton", "desc": "~4 hours through New Brunswick." },
+        { "time": "En Route", "title": "Hopewell Rocks", "desc": "Iconic flower-pot formations carved by Bay of Fundy tides. Worth the detour." },
+        { "time": "Afternoon", "title": "Fredericton Riverfront", "desc": "Walkable capital with craft beer, riverside trails, Beaverbrook Art Gallery (Dalí's Santiago El Grande)." }
+      ]
+    },
+    {
+      "day": 12, "label": "Fredericton → Portland (Home)",
+      "stops": [
+        { "time": "Morning", "title": "Final Drive", "desc": "~5 hours south through NB, back into US at Calais or Houlton." },
+        { "time": "En Route", "title": "Hartland Covered Bridge", "desc": "World's longest covered bridge (1,282 ft). Quick photo stop." },
+        { "time": "Afternoon", "title": "Arrive Portland — Trip Complete", "desc": "12 days, ~4,000 km, 3 ferry crossings. Homecoming dinner." }
+      ]
+    }
+  ],
+  "driving": [
+    { "day": 2, "route": "Portland → Saint John", "distance": "~450 km", "time": "~4.5 hr" },
+    { "day": 3, "route": "Digby → Lunenburg", "distance": "~250 km", "time": "~2.5 hr" },
+    { "day": 4, "route": "Lunenburg → North Sydney", "distance": "~395 km", "time": "~4.5 hr" },
+    { "day": 9, "route": "Fogo → Port aux Basques", "distance": "~560 km", "time": "~6.5 hr" },
+    { "day": 10, "route": "North Sydney → Pictou", "distance": "~185 km", "time": "~2 hr" },
+    { "day": 11, "route": "Pictou → Fredericton", "distance": "~385 km", "time": "~4 hr" },
+    { "day": 12, "route": "Fredericton → Portland", "distance": "~545 km", "time": "~5 hr" }
+  ],
+  "ferries": [
+    { "day": 2, "route": "Saint John → Digby", "vessel": "MV Fundy Rose", "duration": "2.5 hours" },
+    { "day": 4, "route": "North Sydney → Port aux Basques", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)" },
+    { "day": 6, "route": "Farewell → Fogo Island", "duration": "~45 min" },
+    { "day": 9, "route": "Fogo Island → Farewell", "duration": "~45 min" },
+    { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)" }
   ]
 }`;
