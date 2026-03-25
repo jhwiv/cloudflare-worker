@@ -1,5 +1,5 @@
 // Zürich Trip Chat Concierge — Cloudflare Worker
-// Calls Open-Meteo (weather) + Anthropic Claude (LLM) to answer travel questions
+// Uses Cloudflare Workers AI (no external API key required) + Open-Meteo (weather)
 
 // ── CORS helpers ───────────────────────────────────────
 const CORS_HEADERS = {
@@ -124,28 +124,19 @@ YOUR ROLE:
 - DO NOT make up information. If you don't know, say so.`;
 }
 
-// ── Claude API call ────────────────────────────────────
-async function callClaude(systemPrompt, messages, apiKey) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 800,
-      system: systemPrompt,
-      messages,
-    }),
+// ── Workers AI call ────────────────────────────────────
+async function callWorkersAI(ai, systemPrompt, messages) {
+  const aiMessages = [
+    { role: 'system', content: systemPrompt },
+    ...messages,
+  ];
+
+  const response = await ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    messages: aiMessages,
+    max_tokens: 800,
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Claude API ${res.status}: ${err}`);
-  }
-  const data = await res.json();
-  return data.content[0].text;
+
+  return response.response;
 }
 
 // ── Main fetch handler ─────────────────────────────────
@@ -198,7 +189,7 @@ export default {
         }
         msgs.push({ role: 'user', content: message });
 
-        const reply = await callClaude(systemPrompt, msgs, env.ANTHROPIC_API_KEY);
+        const reply = await callWorkersAI(env.AI, systemPrompt, msgs);
         return corsResponse({ reply });
 
       } catch (err) {
