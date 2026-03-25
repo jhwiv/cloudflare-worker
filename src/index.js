@@ -188,7 +188,7 @@ export default {
       const site = SITES[siteKey];
 
       try {
-        const { message, lat, lng, history } = await request.json();
+        const { message, lat, lng, activeTab, history } = await request.json();
         if (!message || typeof message !== 'string') {
           return corsResponse({ error: 'Missing message' }, 400);
         }
@@ -204,9 +204,11 @@ export default {
           }
         }
 
-        // Location context
+        // Location context — use active tab for Maritimes, GPS for Zürich
         let locationNote = '';
-        if (lat && lng) {
+        if (activeTab && siteKey === 'maritimes') {
+          locationNote = `The user is currently viewing the "${activeTab}" section of the itinerary. Focus your answer on this part of the trip.`;
+        } else if (lat && lng) {
           locationNote = `User's current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}. `;
           let matched = false;
           for (const check of site.geoChecks) {
