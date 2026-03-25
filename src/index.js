@@ -175,7 +175,7 @@ export default {
         msgs.push({ role: 'user', content: message });
 
         // Stream from Workers AI
-        const stream = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fast', {
+        const stream = await env.AI.run('@cf/qwen/qwen3-30b-a3b-fp8', {
           messages: msgs,
           max_tokens: 800,
           stream: true,
