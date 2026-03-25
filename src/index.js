@@ -204,11 +204,20 @@ export default {
           }
         }
 
-        // Location context — use active tab for Maritimes, GPS for Zürich
+        // Location context
+        // If current date is within the trip window and GPS is available, use GPS.
+        // Otherwise fall back to active tab (Maritimes) or default note.
+        const TRIP_DATES = {
+          zurich:    { start: '2026-03-25', end: '2026-03-29' },
+          maritimes: { start: '2026-06-27', end: '2026-07-08' },
+        };
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const tripRange = TRIP_DATES[siteKey];
+        const isDuringTrip = tripRange && todayStr >= tripRange.start && todayStr <= tripRange.end;
+
         let locationNote = '';
-        if (activeTab && siteKey === 'maritimes') {
-          locationNote = `The user is currently viewing the "${activeTab}" section of the itinerary. Focus your answer on this part of the trip.`;
-        } else if (lat && lng) {
+        if (isDuringTrip && lat && lng) {
+          // On the trip with GPS — use real location
           locationNote = `User's current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}. `;
           let matched = false;
           for (const check of site.geoChecks) {
@@ -218,7 +227,13 @@ export default {
               break;
             }
           }
-          if (!matched) locationNote += site.defaultGeoNote;
+          if (!matched) locationNote += 'They are on the trip but not near a known stop.';
+        } else if (activeTab) {
+          // Not on the trip (or no GPS) — use whichever tab they're viewing
+          locationNote = `The user is currently viewing the "${activeTab}" section of the itinerary. Focus your answer on this part of the trip.`;
+        } else if (lat && lng) {
+          locationNote = `User's current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}. `;
+          locationNote += site.defaultGeoNote;
         }
 
         const now = new Date();
