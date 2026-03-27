@@ -371,13 +371,16 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
 }
 
 function walkTimeLabel(meters) {
-  const minutes = Math.round(meters / 80); // ~80m/min walking speed
-  return minutes < 1 ? '~1 min walk' : `~${minutes} min walk`;
+  // Straight-line distance × 1.4 circuity factor for urban streets,
+  // then 67 m/min walking speed (~4 km/h, matches Google Maps)
+  const actualMeters = meters * 1.4;
+  const minutes = Math.round(actualMeters / 67);
+  return minutes < 2 ? '~2 min walk' : `~${minutes} min walk`;
 }
 
 // ── Overpass API: fetch nearby places ────────────────
 async function getNearbyPlaces(lat, lng, categories, timezone) {
-  const query = `[out:json][timeout:8];(node["amenity"~"${categories}"]["name"](around:1200,${lat},${lng});way["amenity"~"${categories}"]["name"](around:1200,${lat},${lng}););out center body 40;`;
+  const query = `[out:json][timeout:3];(node["amenity"~"${categories}"]["name"](around:600,${lat},${lng}););out body 15;`;
 
   // Try multiple Overpass endpoints (POST is more reliable from Workers)
   const endpoints = [
