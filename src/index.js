@@ -188,7 +188,12 @@ export default {
       const site = SITES[siteKey];
 
       try {
-        const { message, lat, lng, activeTab, history } = await request.json();
+        const body = await request.json();
+        const { message, activeTab, history } = body;
+        // Support both lat/lng and latitude/longitude field names
+        const lat = body.lat ?? body.latitude ?? null;
+        const lng = body.lng ?? body.longitude ?? null;
+        const clientLocalTime = body.localTime ?? null;
         if (!message || typeof message !== 'string') {
           return corsResponse({ error: 'Missing message' }, 400);
         }
@@ -216,31 +221,40 @@ export default {
         const isDuringTrip = tripRange && todayStr >= tripRange.start && todayStr <= tripRange.end;
 
         let locationNote = '';
-        if (isDuringTrip && lat && lng) {
-          // On the trip with GPS — use real location
-          locationNote = `User's current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}. `;
-          let matched = false;
-          for (const check of site.geoChecks) {
-            if (Math.hypot(lat - check.lat, lng - check.lng) < check.radius) {
-              locationNote += check.label;
-              matched = true;
-              break;
+        if (lat != null && lng != null) {
+          // GPS available — always include raw coordinates so the AI can reason about location
+          locationNote = `USER'S CURRENT GPS: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}. Use these coordinates to determine where the user actually is right now — the LLM can infer the city/region from lat/lon.\n`;
+          if (isDuringTrip) {
+            // On the trip — also check geofence for known stops
+            let matched = false;
+            for (const check of site.geoChecks) {
+              if (Math.hypot(lat - check.lat, lng - check.lng) < check.radius) {
+                locationNote += check.label;
+                matched = true;
+                break;
+              }
             }
+            if (!matched) locationNote += 'They are on the trip but not near a known stop.';
+          } else {
+            locationNote += site.defaultGeoNote;
           }
-          if (!matched) locationNote += 'They are on the trip but not near a known stop.';
-        } else if (activeTab) {
-          // Not on the trip (or no GPS) — use whichever tab they're viewing
-          locationNote = `The user is currently viewing the "${activeTab}" section of the itinerary. Focus your answer on this part of the trip.`;
-        } else if (lat && lng) {
-          locationNote = `User's current GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}. `;
-          locationNote += site.defaultGeoNote;
+        } else {
+          // No GPS — note it's unknown
+          locationNote = 'USER LOCATION: GPS not available. Location is unknown — ask the user where they are if relevant, or make reasonable assumptions based on the itinerary and current date.';
+        }
+        if (activeTab) {
+          locationNote += `\nThe user is currently viewing the "${activeTab}" section of the itinerary.`;
         }
 
+        // Use client-provided local time if available, otherwise compute from server
         const now = new Date();
-        const localTime = now.toLocaleString('en-US', {
+        const serverLocalTime = now.toLocaleString('en-US', {
           timeZone: site.localTimezone, weekday: 'long', year: 'numeric',
           month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
         });
+        const localTime = clientLocalTime
+          ? `${clientLocalTime} (reported by user's device)`
+          : serverLocalTime;
 
         const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime);
 
