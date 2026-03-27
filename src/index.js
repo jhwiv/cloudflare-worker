@@ -101,11 +101,11 @@ const ITINERARY_SCHEDULE = {
   zurich: [
     // Wed 25 Mar night: departing home, overnight flight
     { from: '2026-03-25T22:00Z', to: '2026-03-26T06:00Z',
-      city: 'In transit', timezone: 'Europe/Copenhagen', lat: 55.6761, lng: 12.5683,
+      city: 'In transit', timezone: 'Europe/Copenhagen', lat: 55.6838, lng: 12.5718,
       note: 'The traveler is on an overnight flight to Copenhagen. They arrive CPH around 7 AM Thursday.' },
     // Thu 26 Mar 6 AM CET through Fri 27 Mar ~5 PM CET (17:00 CET = 16:00 UTC)
     { from: '2026-03-26T06:00Z', to: '2026-03-27T16:00Z',
-      city: 'Copenhagen', timezone: 'Europe/Copenhagen', lat: 55.6761, lng: 12.5683,
+      city: 'Copenhagen', timezone: 'Europe/Copenhagen', lat: 55.6838, lng: 12.5718,
       note: 'The traveler should be in Copenhagen (hotel: Scandic Nørreport). They fly to Zürich Friday evening.' },
     // Fri 27 Mar ~5 PM–8 PM CET: in transit CPH → ZRH
     { from: '2026-03-27T16:00Z', to: '2026-03-27T19:40Z',
@@ -510,11 +510,11 @@ const SITES = {
   zurich: {
     weatherLocations: [
       { lat: 47.3769, lng: 8.5417, tz: 'Europe/Zurich', label: 'ZÜRICH' },
-      { lat: 55.6761, lng: 12.5683, tz: 'Europe/Copenhagen', label: 'COPENHAGEN' },
+      { lat: 55.6838, lng: 12.5718, tz: 'Europe/Copenhagen', label: 'COPENHAGEN' },
     ],
     geoChecks: [
       { lat: 47.3769, lng: 8.5417, radius: 0.5, label: 'They appear to be IN Zürich right now.' },
-      { lat: 55.6761, lng: 12.5683, radius: 0.5, label: 'They appear to be IN Copenhagen right now.' },
+      { lat: 55.6838, lng: 12.5718, radius: 0.5, label: 'They appear to be IN Copenhagen right now.' },
     ],
     defaultGeoNote: 'They are NOT currently in Zürich or Copenhagen — they may be planning ahead.',
     localTimezone: 'Europe/Zurich',
