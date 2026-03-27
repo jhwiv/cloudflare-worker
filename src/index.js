@@ -94,6 +94,87 @@ function formatWeather(wx, label) {
   return s;
 }
 
+// ── Itinerary-aware location inference ───────────────────
+// Given the current UTC time, determine where the traveler SHOULD be per the itinerary.
+// Each segment has a UTC-based time range (to avoid timezone ambiguity in comparisons).
+const ITINERARY_SCHEDULE = {
+  zurich: [
+    // Wed 25 Mar night: departing home, overnight flight
+    { from: '2026-03-25T22:00Z', to: '2026-03-26T06:00Z',
+      city: 'In transit', timezone: 'Europe/Copenhagen', lat: 55.6761, lng: 12.5683,
+      note: 'The traveler is on an overnight flight to Copenhagen. They arrive CPH around 7 AM Thursday.' },
+    // Thu 26 Mar 6 AM CET through Fri 27 Mar ~5 PM CET (17:00 CET = 16:00 UTC)
+    { from: '2026-03-26T06:00Z', to: '2026-03-27T16:00Z',
+      city: 'Copenhagen', timezone: 'Europe/Copenhagen', lat: 55.6761, lng: 12.5683,
+      note: 'The traveler should be in Copenhagen (hotel: Scandic Nørreport). They fly to Zürich Friday evening.' },
+    // Fri 27 Mar ~5 PM–8 PM CET: in transit CPH → ZRH
+    { from: '2026-03-27T16:00Z', to: '2026-03-27T19:40Z',
+      city: 'In transit', timezone: 'Europe/Zurich', lat: 47.3769, lng: 8.5417,
+      note: 'The traveler is flying from Copenhagen to Zürich. Arrives ZRH ~7:40 PM CET.' },
+    // Fri 27 Mar 7:40 PM CET onward through Sun 29 Mar ~7 PM CET
+    { from: '2026-03-27T19:40Z', to: '2026-03-29T17:00Z',
+      city: 'Zürich', timezone: 'Europe/Zurich', lat: 47.3769, lng: 8.5417,
+      note: 'The traveler should be in Zürich (hotel: Zürich Marriott Hotel).' },
+    // Sun 29 Mar ~6 PM CET: heading to airport, flight 8:25 PM
+    { from: '2026-03-29T17:00Z', to: '2026-03-29T20:30Z',
+      city: 'Zürich (departing)', timezone: 'Europe/Zurich', lat: 47.3769, lng: 8.5417,
+      note: 'The traveler should be heading to ZRH airport or at the airport. Flight departs 8:25 PM.' },
+  ],
+  maritimes: [
+    { from: '2026-06-27T12:00Z', to: '2026-06-28T04:00Z',
+      city: 'Portland, ME', timezone: 'America/New_York', lat: 43.6591, lng: -70.2568,
+      note: 'Day 1: Arriving in Portland, meeting Molly & Bonie.' },
+    { from: '2026-06-28T04:00Z', to: '2026-06-29T04:00Z',
+      city: 'In transit / Digby, NS', timezone: 'America/Halifax', lat: 44.6206, lng: -65.7596,
+      note: 'Day 2: Driving Portland → Saint John, ferry to Digby.' },
+    { from: '2026-06-29T04:00Z', to: '2026-06-30T04:00Z',
+      city: 'Lunenburg, NS', timezone: 'America/Halifax', lat: 44.3890, lng: -64.5205,
+      note: 'Day 3: Driving Digby → Lunenburg via South Shore.' },
+    { from: '2026-06-30T04:00Z', to: '2026-07-01T04:00Z',
+      city: 'In transit / Ferry', timezone: 'America/Halifax', lat: 46.2382, lng: -60.1942,
+      note: 'Day 4: Driving Lunenburg → North Sydney, overnight ferry to Newfoundland.' },
+    { from: '2026-07-01T04:00Z', to: '2026-07-02T04:00Z',
+      city: 'Twillingate, NL', timezone: 'America/St_Johns', lat: 49.6514, lng: -54.7681,
+      note: 'Day 5: Driving across Newfoundland to Twillingate.' },
+    { from: '2026-07-02T04:00Z', to: '2026-07-05T04:00Z',
+      city: 'Fogo Island, NL', timezone: 'America/St_Johns', lat: 49.4817, lng: -54.7831,
+      note: 'Days 6–8: At Fogo Island Inn.' },
+    { from: '2026-07-05T04:00Z', to: '2026-07-06T04:00Z',
+      city: 'In transit / Ferry', timezone: 'America/St_Johns', lat: 47.5714, lng: -59.1351,
+      note: 'Day 9: Fogo → drive to Port aux Basques, overnight ferry back to Nova Scotia.' },
+    { from: '2026-07-06T04:00Z', to: '2026-07-07T04:00Z',
+      city: 'Pictou, NS', timezone: 'America/Halifax', lat: 45.6797, lng: -62.7126,
+      note: 'Day 10: Arrive North Sydney, drive to Pictou.' },
+    { from: '2026-07-07T04:00Z', to: '2026-07-08T04:00Z',
+      city: 'Fredericton, NB', timezone: 'America/New_York', lat: 45.9636, lng: -66.6431,
+      note: 'Day 11: Drive Pictou → Fredericton via Hopewell Rocks.' },
+    { from: '2026-07-08T04:00Z', to: '2026-07-09T04:00Z',
+      city: 'Portland, ME', timezone: 'America/New_York', lat: 43.6591, lng: -70.2568,
+      note: 'Day 12: Final drive Fredericton → Portland. Trip complete.' },
+  ],
+};
+
+function getItineraryLocation(siteKey, nowUTC) {
+  const schedule = ITINERARY_SCHEDULE[siteKey];
+  if (!schedule) return null;
+  const nowISO = nowUTC.toISOString();
+  for (const seg of schedule) {
+    if (nowISO >= seg.from && nowISO < seg.to) {
+      return { city: seg.city, timezone: seg.timezone, lat: seg.lat, lng: seg.lng, note: seg.note };
+    }
+  }
+  // Before or after the trip
+  const firstStart = schedule[0].from;
+  const lastEnd = schedule[schedule.length - 1].to;
+  if (nowISO < firstStart) {
+    return { city: null, timezone: null, lat: null, lng: null, note: 'The trip has not started yet. The traveler is likely planning ahead.' };
+  }
+  if (nowISO >= lastEnd) {
+    return { city: null, timezone: null, lat: null, lng: null, note: 'The trip is over. The traveler has returned home.' };
+  }
+  return null;
+}
+
 // ── Site configurations ────────────────────────────────
 const SITES = {
   zurich: {
@@ -107,9 +188,13 @@ const SITES = {
     ],
     defaultGeoNote: 'They are NOT currently in Zürich or Copenhagen — they may be planning ahead.',
     localTimezone: 'Europe/Zurich',
-    buildPrompt: (wxSummary, locationNote, localTime) => `You are a knowledgeable, friendly travel concierge for a Zürich & Copenhagen trip (26–29 March 2026). You are embedded in the trip's PWA guide.
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation) => {
+      const timeLabel = inferredLocation?.city || 'Zürich';
+      return `You are a knowledgeable, friendly travel concierge for a Zürich & Copenhagen trip (25–29 March 2026). You are embedded in the trip's PWA guide.
 
-CURRENT DATE/TIME (Zürich): ${localTime}
+CRITICAL: Pay close attention to the user's CURRENT LOCATION and TIME. Do NOT assume they are in Zürich unless the location data confirms it. If they are in Copenhagen, give Copenhagen-relevant advice. The user may be browsing any tab of the itinerary regardless of where they physically are.
+
+CURRENT DATE/TIME (${timeLabel}): ${localTime}
 ${locationNote}
 ${wxSummary}
 
@@ -126,7 +211,8 @@ YOUR ROLE:
 - Keep answers concise — 2-4 short paragraphs max. Use natural language, not bullet lists.
 - You can respond in English or match the traveler's language.
 - If they ask about something not in the itinerary, give helpful local advice but note it's outside the planned itinerary.
-- DO NOT make up information. If you don't know, say so.`,
+- DO NOT make up information. If you don't know, say so.`;
+    },
   },
 
   maritimes: {
@@ -142,9 +228,13 @@ YOUR ROLE:
     ],
     defaultGeoNote: 'They are NOT currently near any of the itinerary stops — they may be planning ahead.',
     localTimezone: 'America/New_York',
-    buildPrompt: (wxSummary, locationNote, localTime) => `You are a knowledgeable, friendly travel concierge for a 12-day Maritimes Grand Loop road trip (Newfoundland & Nova Scotia, Summer 2026). You are embedded in the trip's PWA guide.
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation) => {
+      const timeLabel = inferredLocation?.city || 'local time';
+      return `You are a knowledgeable, friendly travel concierge for a 12-day Maritimes Grand Loop road trip (Newfoundland & Nova Scotia, Summer 2026). You are embedded in the trip's PWA guide.
 
-CURRENT DATE/TIME: ${localTime}
+CRITICAL: Pay close attention to the travelers' CURRENT LOCATION and TIME. Do NOT assume they are at any particular stop unless the location data confirms it. The travelers may be browsing any tab of the itinerary regardless of where they physically are.
+
+CURRENT DATE/TIME (${timeLabel}): ${localTime}
 ${locationNote}
 ${wxSummary}
 
@@ -162,7 +252,8 @@ YOUR ROLE:
 - You can respond in English or match the traveler's language.
 - The travelers are a group including Molly and Bonie.
 - If they ask about something not in the itinerary, give helpful local advice but note it's outside the planned itinerary.
-- DO NOT make up information. If you don't know, say so.`,
+- DO NOT make up information. If you don't know, say so.`;
+    },
   },
 };
 
@@ -194,69 +285,107 @@ export default {
         const lat = body.lat ?? body.latitude ?? null;
         const lng = body.lng ?? body.longitude ?? null;
         const clientLocalTime = body.localTime ?? null;
+        const gpsStatus = body.gpsStatus ?? null; // 'granted', 'denied', 'unavailable', or null
         if (!message || typeof message !== 'string') {
           return corsResponse({ error: 'Missing message' }, 400);
         }
 
-        // Get weather for this site's locations
-        const weatherResults = await Promise.all(
-          site.weatherLocations.map(loc => getWeather(loc.lat, loc.lng, loc.tz))
+        // Determine where the traveler should be right now per itinerary
+        const now = new Date();
+        const inferredLocation = getItineraryLocation(siteKey, now);
+
+        // Get weather for this site's configured locations
+        const weatherPromises = site.weatherLocations.map(
+          loc => getWeather(loc.lat, loc.lng, loc.tz)
         );
+
+        // Also fetch weather for the user's ACTUAL location (GPS or itinerary-inferred)
+        let actualLocationWeatherPromise = null;
+        let actualLocationLabel = null;
+        if (lat != null && lng != null) {
+          // GPS available — fetch weather for their actual coordinates
+          const gpstz = inferredLocation?.timezone || site.localTimezone;
+          const alreadyCovered = site.weatherLocations.some(
+            loc => Math.hypot(lat - loc.lat, lng - loc.lng) < 0.3
+          );
+          if (!alreadyCovered) {
+            actualLocationWeatherPromise = getWeather(lat, lng, gpstz);
+            actualLocationLabel = 'YOUR CURRENT LOCATION';
+          }
+        } else if (inferredLocation?.lat != null) {
+          // No GPS — fetch weather for itinerary-inferred location if not already covered
+          const alreadyCovered = site.weatherLocations.some(
+            loc => Math.hypot(inferredLocation.lat - loc.lat, inferredLocation.lng - loc.lng) < 0.3
+          );
+          if (!alreadyCovered) {
+            actualLocationWeatherPromise = getWeather(
+              inferredLocation.lat, inferredLocation.lng, inferredLocation.timezone
+            );
+            actualLocationLabel = `${inferredLocation.city.toUpperCase()} (CURRENT LOCATION)`;
+          }
+        }
+
+        const [weatherResults, actualLocationWeather] = await Promise.all([
+          Promise.all(weatherPromises),
+          actualLocationWeatherPromise,
+        ]);
+
         let wxSummary = '';
         for (let i = 0; i < weatherResults.length; i++) {
           if (weatherResults[i]) {
             wxSummary += formatWeather(weatherResults[i], site.weatherLocations[i].label);
           }
         }
+        if (actualLocationWeather && actualLocationLabel) {
+          wxSummary += formatWeather(actualLocationWeather, actualLocationLabel);
+        }
 
-        // Location context
-        // If current date is within the trip window and GPS is available, use GPS.
-        // Otherwise fall back to active tab (Maritimes) or default note.
-        const TRIP_DATES = {
-          zurich:    { start: '2026-03-25', end: '2026-03-29' },
-          maritimes: { start: '2026-06-27', end: '2026-07-08' },
-        };
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const tripRange = TRIP_DATES[siteKey];
-        const isDuringTrip = tripRange && todayStr >= tripRange.start && todayStr <= tripRange.end;
-
+        // Location context — priority: GPS > itinerary inference > unknown
         let locationNote = '';
         if (lat != null && lng != null) {
-          // GPS available — always include raw coordinates so the AI can reason about location
-          locationNote = `USER'S CURRENT GPS: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}. Use these coordinates to determine where the user actually is right now — the LLM can infer the city/region from lat/lon.\n`;
-          if (isDuringTrip) {
-            // On the trip — also check geofence for known stops
-            let matched = false;
-            for (const check of site.geoChecks) {
-              if (Math.hypot(lat - check.lat, lng - check.lng) < check.radius) {
-                locationNote += check.label;
-                matched = true;
-                break;
-              }
+          // GPS available — include raw coordinates + geofence check
+          locationNote = `USER'S CURRENT GPS: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}.`;
+          let matched = false;
+          for (const check of site.geoChecks) {
+            if (Math.hypot(lat - check.lat, lng - check.lng) < check.radius) {
+              locationNote += ` ${check.label}`;
+              matched = true;
+              break;
             }
-            if (!matched) locationNote += 'They are on the trip but not near a known stop.';
-          } else {
-            locationNote += site.defaultGeoNote;
           }
+          if (!matched && inferredLocation?.city) {
+            locationNote += ` Based on itinerary, they should be in/near ${inferredLocation.city}. ${inferredLocation.note}`;
+          } else if (!matched) {
+            locationNote += ' They are not near a known itinerary stop.';
+          }
+        } else if (inferredLocation?.city) {
+          // No GPS — use itinerary-based inference
+          const gpsReason = gpsStatus === 'denied'
+            ? 'GPS permission was denied by the user — do NOT ask them to share their location.'
+            : 'GPS is not available.';
+          locationNote = `USER LOCATION: ${gpsReason} Based on the itinerary schedule, the traveler should currently be in ${inferredLocation.city}. ${inferredLocation.note}`;
         } else {
-          // No GPS — note it's unknown
-          locationNote = 'USER LOCATION: GPS not available. Location is unknown — ask the user where they are if relevant, or make reasonable assumptions based on the itinerary and current date.';
+          // No GPS, no itinerary match
+          const gpsReason = gpsStatus === 'denied'
+            ? 'GPS permission was denied by the user — do NOT ask them to share their location.'
+            : 'GPS is not available.';
+          locationNote = `USER LOCATION: ${gpsReason} ${inferredLocation?.note || 'Location is unknown — make reasonable assumptions based on the itinerary and current date.'}`;
         }
         if (activeTab) {
-          locationNote += `\nThe user is currently viewing the "${activeTab}" section of the itinerary.`;
+          locationNote += `\nThe user is currently viewing the "${activeTab}" section of the itinerary (this does NOT necessarily reflect their physical location).`;
         }
 
-        // Use client-provided local time if available, otherwise compute from server
-        const now = new Date();
+        // Compute local time using the actual timezone for where the user is
+        const effectiveTz = inferredLocation?.timezone || site.localTimezone;
         const serverLocalTime = now.toLocaleString('en-US', {
-          timeZone: site.localTimezone, weekday: 'long', year: 'numeric',
+          timeZone: effectiveTz, weekday: 'long', year: 'numeric',
           month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
         });
         const localTime = clientLocalTime
           ? `${clientLocalTime} (reported by user's device)`
           : serverLocalTime;
 
-        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime);
+        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation);
 
         // Build messages array
         const msgs = [{ role: 'system', content: systemPrompt }];
