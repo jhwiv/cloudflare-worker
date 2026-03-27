@@ -211,38 +211,60 @@ function isOpenNow(openingHoursStr, nowLocal) {
   const currentMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
 
   try {
-    const rules = trimmed.split(';').map(r => r.trim()).filter(Boolean);
+    const rules = trimmed.split(/[;,]/).map(r => r.trim()).filter(Boolean);
     for (const rule of rules) {
-      // Match patterns like "Mo-Fr 07:00-22:00" or "Sa 10:00-18:00" or "Mo,We,Fr 08:00-17:00"
-      const match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
-      if (!match) continue;
+      // Skip "off" rules (e.g., "Su off", "PH off") and public holiday rules
+      if (/\boff\b/i.test(rule) || /^PH\b/.test(rule)) {
+        // Check if this "off" rule matches today — if so, place is closed
+        const offMatch = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+off$/i);
+        if (offMatch) {
+          const offDays = offMatch[1].split(',');
+          for (const seg of offDays) {
+            const d = parseDayIndex(seg.trim());
+            if (d != null && osmDay === d) return false; // Closed today
+          }
+        }
+        continue;
+      }
+      // Try pattern with day prefix: "Mo-Fr 07:00-22:00" or "Sa 10:00-18:00"
+      let match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*[-\u2013]\s*(\d{1,2}:\d{2})$/);
+      // Also handle time-only format: "16:00-23:00" (means every day)
+      const timeOnly = !match ? rule.match(/^(\d{1,2}:\d{2})\s*[-\u2013]\s*(\d{1,2}:\d{2})$/) : null;
 
-      const daysPart = match[1];
-      const openTime = match[2].split(':').map(Number);
-      const closeTime = match[3].split(':').map(Number);
+      let dayMatches = false;
+      let openStr, closeStr;
+
+      if (match) {
+        openStr = match[2]; closeStr = match[3];
+        const daysPart = match[1];
+        const daySegments = daysPart.split(',');
+        for (const seg of daySegments) {
+          if (seg.includes('-')) {
+            const [startDay, endDay] = seg.split('-');
+            const s = parseDayIndex(startDay);
+            const e = parseDayIndex(endDay);
+            if (s == null || e == null) continue;
+            if (s <= e) {
+              dayMatches = dayMatches || (osmDay >= s && osmDay <= e);
+            } else {
+              dayMatches = dayMatches || (osmDay >= s || osmDay <= e);
+            }
+          } else {
+            const d = parseDayIndex(seg);
+            if (d != null) dayMatches = dayMatches || (osmDay === d);
+          }
+        }
+      } else if (timeOnly) {
+        openStr = timeOnly[1]; closeStr = timeOnly[2];
+        dayMatches = true; // No day specified = every day
+      } else {
+        continue;
+      }
+
+      const openTime = openStr.split(':').map(Number);
+      const closeTime = closeStr.split(':').map(Number);
       const openMin = openTime[0] * 60 + openTime[1];
       const closeMin = closeTime[0] * 60 + closeTime[1];
-
-      // Parse day specifiers (e.g., "Mo-Fr" or "Sa,Su" or "Mo")
-      const daySegments = daysPart.split(',');
-      let dayMatches = false;
-      for (const seg of daySegments) {
-        if (seg.includes('-')) {
-          const [startDay, endDay] = seg.split('-');
-          const s = parseDayIndex(startDay);
-          const e = parseDayIndex(endDay);
-          if (s == null || e == null) continue;
-          if (s <= e) {
-            dayMatches = dayMatches || (osmDay >= s && osmDay <= e);
-          } else {
-            // Wraps around (e.g., Fr-Mo)
-            dayMatches = dayMatches || (osmDay >= s || osmDay <= e);
-          }
-        } else {
-          const d = parseDayIndex(seg);
-          if (d != null) dayMatches = dayMatches || (osmDay === d);
-        }
-      }
 
       if (dayMatches) {
         // Handle overnight hours (e.g., 22:00-02:00)
@@ -267,9 +289,9 @@ function getClosingTime(openingHoursStr, nowLocal) {
   const osmDay = currentDay === 0 ? 6 : currentDay - 1;
 
   try {
-    const rules = openingHoursStr.split(';').map(r => r.trim()).filter(Boolean);
+    const rules = openingHoursStr.split(/[;,]/).map(r => r.trim()).filter(Boolean);
     for (const rule of rules) {
-      const match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+      const match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*[-\u2013]\s*(\d{1,2}:\d{2})$/);
       if (!match) continue;
 
       const daysPart = match[1];
@@ -294,6 +316,50 @@ function getClosingTime(openingHoursStr, nowLocal) {
   }
 }
 
+// Returns minutes until the place opens today, or null if can't determine
+function getNextOpenTime(openingHoursStr, nowLocal) {
+  if (!openingHoursStr) return null;
+
+  const currentDay = nowLocal.getDay();
+  const osmDay = currentDay === 0 ? 6 : currentDay - 1;
+  const currentMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
+
+  try {
+    const rules = openingHoursStr.split(/[;,]/).map(r => r.trim()).filter(Boolean);
+    let earliest = Infinity;
+    for (const rule of rules) {
+      const match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})$/);
+      if (!match) continue;
+
+      const openTime = match[2].split(':').map(Number);
+      const openMin = openTime[0] * 60 + openTime[1];
+
+      const daysPart = match[1];
+      const daySegments = daysPart.split(',');
+      let dayMatches = false;
+      for (const seg of daySegments) {
+        if (seg.includes('-')) {
+          const parts = seg.split('-');
+          const s = parseDayIndex(parts[0]);
+          const e = parseDayIndex(parts[1]);
+          if (s == null || e == null) continue;
+          dayMatches = dayMatches || (s <= e ? (osmDay >= s && osmDay <= e) : (osmDay >= s || osmDay <= e));
+        } else {
+          const d = parseDayIndex(seg);
+          if (d != null) dayMatches = dayMatches || (osmDay === d);
+        }
+      }
+
+      if (dayMatches && openMin > currentMinutes) {
+        earliest = Math.min(earliest, openMin - currentMinutes);
+      }
+    }
+    return earliest < Infinity ? earliest : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Haversine distance ───────────────────────────────
 function haversineMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -311,7 +377,7 @@ function walkTimeLabel(meters) {
 
 // ── Overpass API: fetch nearby places ────────────────
 async function getNearbyPlaces(lat, lng, categories, timezone) {
-  const query = `[out:json][timeout:5];(node["amenity"~"${categories}"]["name"](around:800,${lat},${lng});way["amenity"~"${categories}"]["name"](around:800,${lat},${lng}););out center body 15;`;
+  const query = `[out:json][timeout:8];(node["amenity"~"${categories}"]["name"](around:1200,${lat},${lng});way["amenity"~"${categories}"]["name"](around:1200,${lat},${lng}););out center body 40;`;
 
   // Try multiple Overpass endpoints (POST is more reliable from Workers)
   const endpoints = [
@@ -365,11 +431,27 @@ async function getNearbyPlaces(lat, lng, categories, timezone) {
       const dist = haversineMeters(lat, lng, placeLat, placeLng);
       const openStatus = isOpenNow(tags.opening_hours, nowLocal);
 
-      // Skip places confirmed closed; include open + unknown
-      if (openStatus === false) continue;
+      // Include open places, unknown-hours places, and places opening within 60 min
+      // Skip places confirmed closed UNLESS they open within 60 minutes
+      if (openStatus === false) {
+        const opensAt = getNextOpenTime(tags.opening_hours, nowLocal);
+        if (!opensAt || opensAt > 60) continue;
+        // Opening soon — include but note when
+      }
 
       const address = [tags['addr:street'], tags['addr:housenumber']].filter(Boolean).join(' ') || null;
       const closing = getClosingTime(tags.opening_hours, nowLocal);
+
+      // Determine open-soon info
+      let opensAtStr = null;
+      if (openStatus === false) {
+        const opensInMin = getNextOpenTime(tags.opening_hours, nowLocal);
+        if (opensInMin) {
+          const opensH = Math.floor((nowLocal.getHours() * 60 + nowLocal.getMinutes() + opensInMin) / 60) % 24;
+          const opensM = (nowLocal.getMinutes() + opensInMin) % 60;
+          opensAtStr = `${String(opensH).padStart(2, '0')}:${String(opensM).padStart(2, '0')}`;
+        }
+      }
 
       places.push({
         name: tags.name,
@@ -379,6 +461,7 @@ async function getNearbyPlaces(lat, lng, categories, timezone) {
         walkTime: walkTimeLabel(dist),
         openVerified: openStatus === true,
         closingTime: closing,
+        opensAt: opensAtStr,
         hoursRaw: tags.opening_hours || null,
         lat: placeLat,
         lng: placeLng,
@@ -403,9 +486,14 @@ function formatPlacesForPrompt(places) {
   let lines = ['VERIFIED NEARBY PLACES (from OpenStreetMap):'];
   for (let i = 0; i < places.length; i++) {
     const p = places[i];
-    let status = p.openVerified
-      ? `open now${p.closingTime && p.closingTime !== '24/7' ? ` (closes ${p.closingTime})` : ''}`
-      : 'hours unverified';
+    let status;
+    if (p.openVerified) {
+      status = `open now${p.closingTime && p.closingTime !== '24/7' ? ` (closes ${p.closingTime})` : ''}`;
+    } else if (p.opensAt) {
+      status = `opens at ${p.opensAt}`;
+    } else {
+      status = 'hours unverified';
+    }
     const addr = p.address ? ` — ${p.address}` : '';
     lines.push(`${i + 1}. ${p.name} — ${p.type}${addr} — ${status} — ${p.walkTime}`);
   }
