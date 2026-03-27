@@ -616,17 +616,6 @@ export default {
       return corsResponse({ status: 'ok', time: new Date().toISOString() });
     }
 
-    // Debug: test Overpass lookup directly
-    if (url.pathname === '/api/debug/places') {
-      const lat = parseFloat(url.searchParams.get('lat') || '55.6761');
-      const lng = parseFloat(url.searchParams.get('lng') || '12.5683');
-      const cats = url.searchParams.get('cats') || 'cafe|restaurant|bakery';
-      const tz = url.searchParams.get('tz') || 'Europe/Copenhagen';
-      const places = await getNearbyPlaces(lat, lng, cats, tz);
-      const formatted = formatPlacesForPrompt(places);
-      return corsResponse({ count: places?.length ?? 0, places, formatted });
-    }
-
     // Chat endpoints: /api/chat/zurich or /api/chat/maritimes
     // Also support legacy /api/chat (defaults to zurich)
     const chatMatch = url.pathname.match(/^\/api\/chat(?:\/(zurich|maritimes))?$/);
