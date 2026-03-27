@@ -541,12 +541,14 @@ YOUR ROLE:
 LOCAL RECOMMENDATIONS (IMPORTANT):
 - When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
 - If no verified list is provided, use your general knowledge but note that opening hours should be confirmed.
-- Provide exactly 3 options, each formatted as a clickable link with a one-line description and estimated walk time from their current location (hotel or last known position).
-- Format each recommendation like this:
-  [Name of Place](https://maps.google.com/?q=Place+Name+City) — Brief one-sentence description. ~X min walk.
+- Provide exactly 3 options. Each MUST include: a clickable Google Maps link, a one-sentence description of what makes the place good, and the estimated walk time.
+- Format EXACTLY like this (the description sentence is mandatory, never omit it):
+  [Name of Place](https://maps.google.com/?q=Place+Name+City) — One sentence describing the vibe, specialty, or what to order. ~X min walk.
+- Example: [Europa 1989](https://maps.google.com/?q=Europa+1989+Copenhagen) — A cozy neighborhood café known for great espresso and fresh pastries in a relaxed setting. ~9 min walk.
+- The description must tell the traveler WHY this place is worth visiting — mention the food, atmosphere, or specialty.
 - Pick well-known, highly-rated, real establishments. Prioritize places that are likely open at the current time of day.
 - NEVER say "I don't have specific recommendations" or "ask the hotel staff" — you are the concierge, give real answers.
-- Keep answers concise — 2-4 short paragraphs max, with the 3 linked recommendations clearly presented.
+- Keep answers concise — a brief intro sentence, then the 3 recommendations, then an optional closing line.
 - Do NOT fabricate place names, but DO use your real knowledge of well-known establishments in these cities.`;
     },
   },
@@ -591,12 +593,13 @@ YOUR ROLE:
 LOCAL RECOMMENDATIONS (IMPORTANT):
 - When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
 - If no verified list is provided, use your general knowledge but note that opening hours should be confirmed.
-- Provide exactly 3 options, each formatted as a clickable link with a one-line description and estimated walk/drive time from their current location.
-- Format each recommendation like this:
-  [Name of Place](https://maps.google.com/?q=Place+Name+City) — Brief one-sentence description. ~X min walk/drive.
+- Provide exactly 3 options. Each MUST include: a clickable Google Maps link, a one-sentence description of what makes the place good, and the estimated walk/drive time.
+- Format EXACTLY like this (the description sentence is mandatory, never omit it):
+  [Name of Place](https://maps.google.com/?q=Place+Name+City) — One sentence describing the vibe, specialty, or what to order. ~X min walk/drive.
+- The description must tell the traveler WHY this place is worth visiting — mention the food, atmosphere, or specialty.
 - Pick well-known, highly-rated, real establishments. Prioritize places that are likely open at the current time of day.
 - NEVER say "I don't have specific recommendations" or "ask the hotel staff" — you are the concierge, give real answers.
-- Keep answers concise — 2-4 short paragraphs max, with the 3 linked recommendations clearly presented.
+- Keep answers concise — a brief intro sentence, then the 3 recommendations, then an optional closing line.
 - Do NOT fabricate place names, but DO use your real knowledge of well-known establishments in these areas.`;
     },
   },
@@ -735,13 +738,22 @@ export default {
 
         // Compute local time using the actual timezone for where the user is
         const effectiveTz = inferredLocation?.timezone || site.localTimezone;
-        const serverLocalTime = now.toLocaleString('en-US', {
+        const formatOpts = {
           timeZone: effectiveTz, weekday: 'long', year: 'numeric',
           month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
-        });
-        const localTime = clientLocalTime
-          ? `${clientLocalTime} (reported by user's device)`
-          : serverLocalTime;
+        };
+        let localTime;
+        if (clientLocalTime) {
+          // Client sends ISO UTC string — convert to the user's effective timezone
+          try {
+            const clientDate = new Date(clientLocalTime);
+            localTime = clientDate.toLocaleString('en-US', formatOpts);
+          } catch {
+            localTime = now.toLocaleString('en-US', formatOpts);
+          }
+        } else {
+          localTime = now.toLocaleString('en-US', formatOpts);
+        }
 
         // Build nearby-places context for recommendation queries
         const nearbyPlacesContext = formatPlacesForPrompt(nearbyPlaces);
