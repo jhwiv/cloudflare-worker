@@ -312,17 +312,43 @@ function walkTimeLabel(meters) {
 // ── Overpass API: fetch nearby places ────────────────
 async function getNearbyPlaces(lat, lng, categories, timezone) {
   const query = `[out:json][timeout:5];(node["amenity"~"${categories}"]["name"](around:800,${lat},${lng});way["amenity"~"${categories}"]["name"](around:800,${lat},${lng}););out center body 15;`;
-  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+  // Try multiple Overpass endpoints (POST is more reliable from Workers)
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
+
+  let data = null;
+  for (const endpoint of endpoints) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        data = await res.json();
+        if (data.elements && data.elements.length > 0) break;
+      }
+      console.log(`Overpass ${endpoint}: ${res.status}, elements: ${data?.elements?.length ?? 0}`);
+    } catch (err) {
+      console.log(`Overpass ${endpoint} failed: ${err.message}`);
+      continue;
+    }
+  }
+
+  if (!data?.elements?.length) {
+    console.log('Overpass: no results from any endpoint');
+    return null;
+  }
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.elements || data.elements.length === 0) return null;
 
     // Build local time for opening-hours check
     const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
@@ -361,8 +387,11 @@ async function getNearbyPlaces(lat, lng, categories, timezone) {
 
     // Sort by distance, take top 10
     places.sort((a, b) => a.distance - b.distance);
-    return places.slice(0, 10);
-  } catch {
+    const result = places.slice(0, 10);
+    console.log(`Overpass: found ${data.elements.length} raw, ${places.length} open/unknown, returning ${result.length}`);
+    return result;
+  } catch (err) {
+    console.log(`Overpass parse error: ${err.message}`);
     return null;
   }
 }
