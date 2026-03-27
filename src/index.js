@@ -175,6 +175,216 @@ function getItineraryLocation(siteKey, nowUTC) {
   return null;
 }
 
+// ── Recommendation detection ─────────────────────────
+function isRecommendationQuery(message) {
+  const keywords = /\b(breakfast|brunch|lunch|dinner|coffee|café|cafe|eat|restaurant|bar|pub|drink|food|recommend|suggestion|where should|good place|nearby|snack|bakery|pastry|grocery|supermarket|pharmacy|gelato|ice cream)\b/i;
+  return keywords.test(message);
+}
+
+// ── Category mapping for Overpass queries ────────────
+function getCategoriesFromMessage(message) {
+  const msg = message.toLowerCase();
+  if (/\b(breakfast|brunch|coffee|café|cafe|bakery|pastry)\b/.test(msg)) return 'cafe|restaurant|bakery';
+  if (/\b(bar|pub|drink)\b/.test(msg)) return 'bar|pub';
+  if (/\b(pharmacy)\b/.test(msg)) return 'pharmacy';
+  if (/\b(grocery|supermarket)\b/.test(msg)) return 'supermarket';
+  if (/\b(gelato|ice cream)\b/.test(msg)) return 'cafe|ice_cream';
+  if (/\b(lunch|dinner|eat|food|restaurant)\b/.test(msg)) return 'restaurant|cafe';
+  return 'cafe|restaurant|bar';
+}
+
+// ── Opening hours parser (OSM format) ────────────────
+const DAY_MAP = { mo: 0, tu: 1, we: 2, th: 3, fr: 4, sa: 5, su: 6 };
+
+function parseDayIndex(str) {
+  return DAY_MAP[str.toLowerCase().slice(0, 2)];
+}
+
+function isOpenNow(openingHoursStr, nowLocal) {
+  if (!openingHoursStr) return null;
+  const trimmed = openingHoursStr.trim();
+  if (trimmed === '24/7') return true;
+
+  const currentDay = nowLocal.getDay(); // 0=Sun
+  // Map JS getDay (0=Sun) to OSM (0=Mo)
+  const osmDay = currentDay === 0 ? 6 : currentDay - 1;
+  const currentMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
+
+  try {
+    const rules = trimmed.split(';').map(r => r.trim()).filter(Boolean);
+    for (const rule of rules) {
+      // Match patterns like "Mo-Fr 07:00-22:00" or "Sa 10:00-18:00" or "Mo,We,Fr 08:00-17:00"
+      const match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+      if (!match) continue;
+
+      const daysPart = match[1];
+      const openTime = match[2].split(':').map(Number);
+      const closeTime = match[3].split(':').map(Number);
+      const openMin = openTime[0] * 60 + openTime[1];
+      const closeMin = closeTime[0] * 60 + closeTime[1];
+
+      // Parse day specifiers (e.g., "Mo-Fr" or "Sa,Su" or "Mo")
+      const daySegments = daysPart.split(',');
+      let dayMatches = false;
+      for (const seg of daySegments) {
+        if (seg.includes('-')) {
+          const [startDay, endDay] = seg.split('-');
+          const s = parseDayIndex(startDay);
+          const e = parseDayIndex(endDay);
+          if (s == null || e == null) continue;
+          if (s <= e) {
+            dayMatches = dayMatches || (osmDay >= s && osmDay <= e);
+          } else {
+            // Wraps around (e.g., Fr-Mo)
+            dayMatches = dayMatches || (osmDay >= s || osmDay <= e);
+          }
+        } else {
+          const d = parseDayIndex(seg);
+          if (d != null) dayMatches = dayMatches || (osmDay === d);
+        }
+      }
+
+      if (dayMatches) {
+        // Handle overnight hours (e.g., 22:00-02:00)
+        if (closeMin <= openMin) {
+          if (currentMinutes >= openMin || currentMinutes < closeMin) return true;
+        } else {
+          if (currentMinutes >= openMin && currentMinutes < closeMin) return true;
+        }
+      }
+    }
+    return false;
+  } catch {
+    return null;
+  }
+}
+
+function getClosingTime(openingHoursStr, nowLocal) {
+  if (!openingHoursStr) return null;
+  if (openingHoursStr.trim() === '24/7') return '24/7';
+
+  const currentDay = nowLocal.getDay();
+  const osmDay = currentDay === 0 ? 6 : currentDay - 1;
+
+  try {
+    const rules = openingHoursStr.split(';').map(r => r.trim()).filter(Boolean);
+    for (const rule of rules) {
+      const match = rule.match(/^([A-Za-z][a-z](?:[-,][A-Za-z][a-z])*)\s+(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+      if (!match) continue;
+
+      const daysPart = match[1];
+      const closeTime = match[3];
+      const daySegments = daysPart.split(',');
+      for (const seg of daySegments) {
+        if (seg.includes('-')) {
+          const [startDay, endDay] = seg.split('-');
+          const s = parseDayIndex(startDay);
+          const e = parseDayIndex(endDay);
+          if (s == null || e == null) continue;
+          if (s <= e ? (osmDay >= s && osmDay <= e) : (osmDay >= s || osmDay <= e)) return closeTime;
+        } else {
+          const d = parseDayIndex(seg);
+          if (d != null && osmDay === d) return closeTime;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Haversine distance ───────────────────────────────
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function walkTimeLabel(meters) {
+  const minutes = Math.round(meters / 80); // ~80m/min walking speed
+  return minutes < 1 ? '~1 min walk' : `~${minutes} min walk`;
+}
+
+// ── Overpass API: fetch nearby places ────────────────
+async function getNearbyPlaces(lat, lng, categories, timezone) {
+  const query = `[out:json][timeout:5];(node["amenity"~"${categories}"]["name"](around:800,${lat},${lng});way["amenity"~"${categories}"]["name"](around:800,${lat},${lng}););out center body 15;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.elements || data.elements.length === 0) return null;
+
+    // Build local time for opening-hours check
+    const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+
+    const places = [];
+    for (const el of data.elements) {
+      const tags = el.tags || {};
+      if (!tags.name) continue;
+
+      const placeLat = el.lat ?? el.center?.lat;
+      const placeLng = el.lon ?? el.center?.lon;
+      if (placeLat == null || placeLng == null) continue;
+
+      const dist = haversineMeters(lat, lng, placeLat, placeLng);
+      const openStatus = isOpenNow(tags.opening_hours, nowLocal);
+
+      // Skip places confirmed closed; include open + unknown
+      if (openStatus === false) continue;
+
+      const address = [tags['addr:street'], tags['addr:housenumber']].filter(Boolean).join(' ') || null;
+      const closing = getClosingTime(tags.opening_hours, nowLocal);
+
+      places.push({
+        name: tags.name,
+        type: tags.amenity || 'unknown',
+        address,
+        distance: dist,
+        walkTime: walkTimeLabel(dist),
+        openVerified: openStatus === true,
+        closingTime: closing,
+        hoursRaw: tags.opening_hours || null,
+        lat: placeLat,
+        lng: placeLng,
+      });
+    }
+
+    // Sort by distance, take top 10
+    places.sort((a, b) => a.distance - b.distance);
+    return places.slice(0, 10);
+  } catch {
+    return null;
+  }
+}
+
+// ── Format places for system prompt ──────────────────
+function formatPlacesForPrompt(places) {
+  if (!places || places.length === 0) return '';
+
+  let lines = ['VERIFIED NEARBY PLACES (from OpenStreetMap):'];
+  for (let i = 0; i < places.length; i++) {
+    const p = places[i];
+    let status = p.openVerified
+      ? `open now${p.closingTime && p.closingTime !== '24/7' ? ` (closes ${p.closingTime})` : ''}`
+      : 'hours unverified';
+    const addr = p.address ? ` — ${p.address}` : '';
+    lines.push(`${i + 1}. ${p.name} — ${p.type}${addr} — ${status} — ${p.walkTime}`);
+  }
+  lines.push('');
+  lines.push('IMPORTANT: When recommending places, STRONGLY PREFER places from this verified list. These are confirmed to exist and be currently open (or have unverified hours). Include Google Maps links formatted as [Name](https://maps.google.com/?q=Name+City).');
+  return lines.join('\n');
+}
+
 // ── Site configurations ────────────────────────────────
 const SITES = {
   zurich: {
@@ -188,7 +398,7 @@ const SITES = {
     ],
     defaultGeoNote: 'They are NOT currently in Zürich or Copenhagen — they may be planning ahead.',
     localTimezone: 'Europe/Zurich',
-    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation) => {
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext) => {
       const timeLabel = inferredLocation?.city || 'Zürich';
       return `You are a knowledgeable, friendly travel concierge for a Zürich & Copenhagen trip (25–29 March 2026). You are embedded in the trip's PWA guide.
 
@@ -196,6 +406,7 @@ CRITICAL: Pay close attention to the user's CURRENT LOCATION and TIME. Do NOT as
 
 CURRENT DATE/TIME (${timeLabel}): ${localTime}
 ${locationNote}
+${nearbyPlacesContext ? '\n' + nearbyPlacesContext + '\n' : ''}
 ${wxSummary}
 
 FULL ITINERARY:
@@ -211,13 +422,12 @@ YOUR ROLE:
 - You can respond in English or match the traveler's language.
 
 LOCAL RECOMMENDATIONS (IMPORTANT):
-- When the traveler asks about restaurants, cafés, bars, activities, or anything NOT explicitly in the itinerary, you MUST give specific, actionable recommendations using your general knowledge of the city.
+- When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
+- If no verified list is provided, use your general knowledge but note that opening hours should be confirmed.
 - Provide exactly 3 options, each formatted as a clickable link with a one-line description and estimated walk time from their current location (hotel or last known position).
 - Format each recommendation like this:
   [Name of Place](https://maps.google.com/?q=Place+Name+City) — Brief one-sentence description. ~X min walk.
 - Pick well-known, highly-rated, real establishments. Prioritize places that are likely open at the current time of day.
-- For Copenhagen near Scandic Nørreport: you know the Nørreport/Torvehallerne/Nørrebro area well. Recommend real places like Torvehallerne food hall, Café Norden, Kompasset, The Coffee Collective, Paludan Bogcafé, etc.
-- For Zürich near Marriott Hotel (Neumühlequai 42): you know the HB/Sihlquai area. Recommend real places like Sprüngli, Hiltl, Zeughauskeller, etc.
 - NEVER say "I don't have specific recommendations" or "ask the hotel staff" — you are the concierge, give real answers.
 - Keep answers concise — 2-4 short paragraphs max, with the 3 linked recommendations clearly presented.
 - Do NOT fabricate place names, but DO use your real knowledge of well-known establishments in these cities.`;
@@ -237,7 +447,7 @@ LOCAL RECOMMENDATIONS (IMPORTANT):
     ],
     defaultGeoNote: 'They are NOT currently near any of the itinerary stops — they may be planning ahead.',
     localTimezone: 'America/New_York',
-    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation) => {
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext) => {
       const timeLabel = inferredLocation?.city || 'local time';
       return `You are a knowledgeable, friendly travel concierge for a 12-day Maritimes Grand Loop road trip (Newfoundland & Nova Scotia, Summer 2026). You are embedded in the trip's PWA guide.
 
@@ -245,6 +455,7 @@ CRITICAL: Pay close attention to the travelers' CURRENT LOCATION and TIME. Do NO
 
 CURRENT DATE/TIME (${timeLabel}): ${localTime}
 ${locationNote}
+${nearbyPlacesContext ? '\n' + nearbyPlacesContext + '\n' : ''}
 ${wxSummary}
 
 FULL ITINERARY:
@@ -261,7 +472,8 @@ YOUR ROLE:
 - You can respond in English or match the traveler's language.
 - The travelers are a group including Molly and Bonie.
 LOCAL RECOMMENDATIONS (IMPORTANT):
-- When the travelers ask about restaurants, cafés, bars, activities, or anything NOT explicitly in the itinerary, you MUST give specific, actionable recommendations using your general knowledge of the area.
+- When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
+- If no verified list is provided, use your general knowledge but note that opening hours should be confirmed.
 - Provide exactly 3 options, each formatted as a clickable link with a one-line description and estimated walk/drive time from their current location.
 - Format each recommendation like this:
   [Name of Place](https://maps.google.com/?q=Place+Name+City) — Brief one-sentence description. ~X min walk/drive.
@@ -341,9 +553,22 @@ export default {
           }
         }
 
-        const [weatherResults, actualLocationWeather] = await Promise.all([
+        // Determine if we need to fetch nearby places (recommendation query)
+        let nearbyPlacesPromise = null;
+        if (isRecommendationQuery(message)) {
+          const searchLat = lat ?? inferredLocation?.lat;
+          const searchLng = lng ?? inferredLocation?.lng;
+          const searchTz = inferredLocation?.timezone || site.localTimezone;
+          if (searchLat != null && searchLng != null) {
+            const cats = getCategoriesFromMessage(message);
+            nearbyPlacesPromise = getNearbyPlaces(searchLat, searchLng, cats, searchTz);
+          }
+        }
+
+        const [weatherResults, actualLocationWeather, nearbyPlaces] = await Promise.all([
           Promise.all(weatherPromises),
           actualLocationWeatherPromise,
+          nearbyPlacesPromise,
         ]);
 
         let wxSummary = '';
@@ -401,7 +626,10 @@ export default {
           ? `${clientLocalTime} (reported by user's device)`
           : serverLocalTime;
 
-        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation);
+        // Build nearby-places context for recommendation queries
+        const nearbyPlacesContext = formatPlacesForPrompt(nearbyPlaces);
+
+        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext);
 
         // Build messages array
         const msgs = [{ role: 'system', content: systemPrompt }];
