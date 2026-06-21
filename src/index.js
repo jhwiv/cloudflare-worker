@@ -902,10 +902,11 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": 3, "label": "Digby → Lunenburg",
+      "day": 3, "label": "Digby → Lunenburg", "date": "Mon Jun 29",
       "stops": [
         { "time": "Morning", "title": "Scenic Drive — South Shore", "desc": "~2.5 hours along the Lighthouse Route through fishing villages." },
-        { "time": "Afternoon", "title": "Explore Lunenburg", "desc": "UNESCO World Heritage Site. Colourful harbour, Fisheries Museum, Bluenose II." }
+        { "time": "Afternoon", "title": "Explore Lunenburg", "desc": "UNESCO World Heritage Site. Colourful harbour, Fisheries Museum, Bluenose II." },
+        { "time": "8:00 PM", "title": "Dinner: Beach Pea Kitchen & Bar CONFIRMED", "desc": "Lunenburg, NS. Farm-to-table, Nova Scotian seafood. Reservation confirmed for 8:00 PM." }
       ]
     },
     {
@@ -979,5 +980,8 @@ const MARITIMES_ITINERARY = `{
     { "day": 6, "route": "Farewell → Fogo Island", "duration": "~45 min" },
     { "day": 9, "route": "Fogo Island → Farewell", "duration": "~45 min" },
     { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)" }
+  ],
+  "dining": [
+    { "day": 3, "date": "Mon Jun 29", "time": "8:00 PM", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" }
   ]
 }`;
