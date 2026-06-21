@@ -906,7 +906,7 @@ const MARITIMES_ITINERARY = `{
       "stops": [
         { "time": "Morning", "title": "Scenic Drive — South Shore", "desc": "~2.5 hours along the Lighthouse Route through fishing villages." },
         { "time": "Afternoon", "title": "Explore Lunenburg", "desc": "UNESCO World Heritage Site. Colourful harbour, Fisheries Museum, Bluenose II." },
-        { "time": "8:00 PM", "title": "Dinner: Beach Pea Kitchen & Bar CONFIRMED", "desc": "Lunenburg, NS. Farm-to-table, Nova Scotian seafood. Reservation confirmed for 8:00 PM." }
+        { "time": "8:00 PM ADT (Atlantic Time)", "title": "Dinner: Beach Pea Kitchen & Bar CONFIRMED", "desc": "Lunenburg, NS. Farm-to-table, Nova Scotian seafood. Reservation confirmed for 8:00 PM local Atlantic Time (UTC-3) on Monday June 29, 2026. That is 7:00 PM Eastern." }
       ]
     },
     {
@@ -982,6 +982,6 @@ const MARITIMES_ITINERARY = `{
     { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)" }
   ],
   "dining": [
-    { "day": 3, "date": "Mon Jun 29", "time": "8:00 PM", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" }
+    { "day": 3, "date": "Mon Jun 29", "time_local": "8:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-29T20:00:00-03:00", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" }
   ]
 }`;
