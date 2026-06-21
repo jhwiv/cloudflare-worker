@@ -886,14 +886,15 @@ const MARITIMES_ITINERARY = `{
   ],
   "days": [
     {
-      "day": 1, "label": "Portland",
+      "day": 1, "label": "Portland", "date": "Sat Jun 27", "timezone": "EDT (Eastern Daylight Time, UTC-4)",
       "stops": [
         { "time": "Afternoon", "title": "Meet Molly & Bonie", "desc": "Arrive in Portland. Stroll the Old Port — cobblestone streets, galleries, waterfront." },
         { "time": "Evening", "title": "Dinner in Portland", "desc": "Fresh seafood, farm-to-table, craft breweries." }
       ]
     },
     {
-      "day": 2, "label": "Portland → Saint John → Digby",
+      "day": 2, "label": "Portland → Saint John → Digby", "date": "Sun Jun 28", "timezone": "Starts EDT, crosses into ADT (Atlantic Time, UTC-3) at the New Brunswick border. Times before border are EDT; times after border (Saint John, Digby) are ADT.",
+      "depart": "7:00 AM EDT",
       "stops": [
         { "time": "Morning", "title": "Drive: Portland → Saint John, NB", "desc": "~4.5-hour drive north through Maine into New Brunswick. Border at Calais/St. Stephen. Passports needed." },
         { "time": "En Route", "title": "Suggested Stops", "desc": "Coffee in Bangor, ME (~2 hrs). After border, St. Andrews by-the-Sea — charming seaside town." },
@@ -902,7 +903,8 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": 3, "label": "Digby → Lunenburg", "date": "Mon Jun 29",
+      "day": 3, "label": "Digby → Lunenburg", "date": "Mon Jun 29", "timezone": "ADT (Atlantic Time, UTC-3)",
+      "depart": "9:00 AM ADT",
       "stops": [
         { "time": "Morning", "title": "Scenic Drive — South Shore", "desc": "~2.5 hours along the Lighthouse Route through fishing villages." },
         { "time": "Afternoon", "title": "Explore Lunenburg", "desc": "UNESCO World Heritage Site. Colourful harbour, Fisheries Museum, Bluenose II." },
@@ -910,14 +912,16 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": 4, "label": "Lunenburg → North Sydney → Overnight Ferry",
+      "day": 4, "label": "Lunenburg → North Sydney → Overnight Ferry", "date": "Tue Jun 30", "timezone": "ADT (Atlantic Time, UTC-3) until boarding Marine Atlantic ferry; ferry crosses into NDT (Newfoundland Time, UTC-2:30) overnight.",
+      "depart": "8:00 AM ADT",
       "stops": [
-        { "time": "8:00 AM", "title": "Early Start", "desc": "~4.5-hour drive to North Sydney, Cape Breton. Longest driving day." },
+        { "time": "8:00 AM ADT", "title": "Early Start", "desc": "~4.5-hour drive to North Sydney, Cape Breton. Longest driving day." },
         { "time": "Evening", "title": "Overnight Ferry to Newfoundland", "desc": "Marine Atlantic ferry, 6–8 hour crossing. Cabin booked." }
       ]
     },
     {
-      "day": 5, "label": "Port aux Basques → Twillingate",
+      "day": 5, "label": "Port aux Basques → Twillingate", "date": "Wed Jul 1", "timezone": "NDT (Newfoundland Daylight Time, UTC-2:30) — 30 minutes AHEAD of Atlantic Time. This is a Newfoundland-specific half-hour offset that confuses many visitors.",
+      "depart": "~9:00 AM NDT (after ferry arrival in Port aux Basques)",
       "stops": [
         { "time": "Morning", "title": "Arrive Port aux Basques", "desc": "Begin drive east across Newfoundland on the Trans-Canada." },
         { "time": "Mid-Morning", "title": "Corner Brook", "desc": "~2.5 hrs from Port aux Basques. Captain Cook's Lookout — panoramic Bay of Islands views." },
@@ -926,7 +930,7 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": "6–8", "label": "Fogo Island",
+      "day": "6–8", "label": "Fogo Island", "dates": "Thu Jul 2 – Sat Jul 4", "timezone": "NDT (Newfoundland Daylight Time, UTC-2:30) — 30 minutes ahead of Atlantic Time.",
       "stops": [
         { "time": "Day 6 Morning", "title": "Ferry to Fogo Island", "desc": "Drive Twillingate to Farewell, ~45 min ferry through iceberg waters." },
         { "time": "Day 6", "title": "Check In — Fogo Island Inn", "desc": "Architecturally stunning hotel on stilts at the North Atlantic edge. Designed by Todd Saunders. Every room faces the sea." },
@@ -934,7 +938,8 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": 9, "label": "Fogo → Port aux Basques (Return Ferry)",
+      "day": 9, "label": "Fogo → Port aux Basques (Return Ferry)", "date": "Sun Jul 5", "timezone": "Starts NDT (Newfoundland) and ends on the overnight Marine Atlantic ferry which crosses back into ADT.",
+      "depart": "7:00 AM NDT",
       "stops": [
         { "time": "Morning", "title": "Ferry back to mainland", "desc": "~45 min crossing." },
         { "time": "All Day", "title": "Drive: Farewell → Port aux Basques", "desc": "~560 km, ~6.5 hours. Grand Falls-Windsor (~2.5 hrs) for the Gorge. Deer Lake (~4.5 hrs) for lunch." },
@@ -942,14 +947,16 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": 10, "label": "North Sydney → Pictou",
+      "day": 10, "label": "North Sydney → Pictou", "date": "Mon Jul 6", "timezone": "ADT (Atlantic Time, UTC-3) — clocks shift back 30 minutes from NDT when the ferry arrives in Nova Scotia.",
+      "depart": "~10:00 AM ADT (after Marine Atlantic ferry arrival)",
       "stops": [
         { "time": "Morning", "title": "Arrive North Sydney", "desc": "Disembark ferry." },
         { "time": "Afternoon", "title": "Explore Pictou", "desc": "Birthplace of New Scotland — first Scottish settlers landed 1773. Ship Hector Heritage Quay." }
       ]
     },
     {
-      "day": 11, "label": "Pictou → Fredericton",
+      "day": 11, "label": "Pictou → Fredericton", "date": "Tue Jul 7", "timezone": "ADT (Atlantic Time, UTC-3)",
+      "depart": "8:00 AM ADT",
       "stops": [
         { "time": "Morning", "title": "Drive: Pictou → Fredericton", "desc": "~4 hours through New Brunswick." },
         { "time": "En Route", "title": "Hopewell Rocks", "desc": "Iconic flower-pot formations carved by Bay of Fundy tides. Worth the detour." },
@@ -957,7 +964,8 @@ const MARITIMES_ITINERARY = `{
       ]
     },
     {
-      "day": 12, "label": "Fredericton → Portland (Home)",
+      "day": 12, "label": "Fredericton → Portland (Home)", "date": "Wed Jul 8", "timezone": "Starts ADT (Atlantic Time, UTC-3) in New Brunswick; crosses back into EDT (Eastern, UTC-4) at the Maine border.",
+      "depart": "8:00 AM ADT",
       "stops": [
         { "time": "Morning", "title": "Final Drive", "desc": "~5 hours south through NB, back into US at Calais or Houlton." },
         { "time": "En Route", "title": "Hartland Covered Bridge", "desc": "World's longest covered bridge (1,282 ft). Quick photo stop." },
@@ -974,12 +982,27 @@ const MARITIMES_ITINERARY = `{
     { "day": 11, "route": "Pictou → Fredericton", "distance": "~385 km", "time": "~4 hr" },
     { "day": 12, "route": "Fredericton → Portland", "distance": "~545 km", "time": "~5 hr" }
   ],
+  "timezone_summary": {
+    "key_rule": "Newfoundland (NL) uses NDT, which is 30 minutes AHEAD of ADT used in NS and NB. This half-hour offset trips up many visitors.",
+    "by_day": {
+      "Day 1 (Sat Jun 27)": "EDT — Portland, ME",
+      "Day 2 (Sun Jun 28)": "EDT → ADT at NB border",
+      "Day 3 (Mon Jun 29)": "ADT — Lunenburg, NS",
+      "Day 4 (Tue Jun 30)": "ADT then ferry overnight into NDT",
+      "Day 5 (Wed Jul 1)": "NDT — arrive Newfoundland",
+      "Days 6-8 (Thu Jul 2 - Sat Jul 4)": "NDT — Fogo Island",
+      "Day 9 (Sun Jul 5)": "NDT then ferry overnight back to ADT",
+      "Day 10 (Mon Jul 6)": "ADT — North Sydney, Pictou",
+      "Day 11 (Tue Jul 7)": "ADT — Pictou to Fredericton",
+      "Day 12 (Wed Jul 8)": "ADT → EDT at Maine border"
+    }
+  },
   "ferries": [
-    { "day": 2, "route": "Saint John → Digby", "vessel": "MV Fundy Rose", "duration": "2.5 hours" },
-    { "day": 4, "route": "North Sydney → Port aux Basques", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)" },
+    { "day": 2, "route": "Saint John → Digby", "vessel": "MV Fundy Rose", "duration": "2.5 hours", "departs": "2:15 PM ADT", "arrives": "4:45 PM ADT" },
+    { "day": 4, "route": "North Sydney → Port aux Basques", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)", "note": "Boards ADT, arrives NDT — clocks lose 30 minutes during the overnight." },
     { "day": 6, "route": "Farewell → Fogo Island", "duration": "~45 min" },
     { "day": 9, "route": "Fogo Island → Farewell", "duration": "~45 min" },
-    { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)" }
+    { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)", "note": "Boards NDT, arrives ADT — clocks gain 30 minutes during the overnight." }
   ],
   "dining": [
     { "day": 3, "date": "Mon Jun 29", "time_local": "8:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-29T20:00:00-03:00", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" }
