@@ -1,6 +1,11 @@
 // Multi-Site Trip Chat Concierge — Cloudflare Worker
 // Uses Cloudflare Workers AI (streaming) + Open-Meteo (weather)
-// Routes: /api/chat/zurich and /api/chat/maritimes
+// Routes:
+//   /api/chat/zurich, /api/chat/maritimes — concierge chat
+//   /api/ferry-status — live Marine Atlantic advisory (KV-cached 15 min)
+//   /api/health — healthcheck
+
+import { getFerryAdvisory, formatAdvisoryForPrompt } from './ferry-status.js';
 
 // ── CORS helpers ───────────────────────────────────────
 const CORS_HEADERS = {
@@ -619,7 +624,7 @@ LOCAL RECOMMENDATIONS (IMPORTANT):
     ],
     defaultGeoNote: 'They are NOT currently near any of the itinerary stops — they may be planning ahead.',
     localTimezone: 'America/New_York',
-    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext) => {
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext, ferryStatusContext) => {
       const timeLabel = inferredLocation?.city || 'local time';
       return `You are a knowledgeable, friendly travel concierge for a 12-day Maritimes Grand Loop road trip (Newfoundland & Nova Scotia, Summer 2026). You are embedded in the trip's PWA guide.
 
@@ -628,6 +633,7 @@ CRITICAL: Pay close attention to the travelers' CURRENT LOCATION and TIME. Do NO
 CURRENT DATE/TIME (${timeLabel}): ${localTime}
 ${locationNote}
 ${nearbyPlacesContext ? '\n' + nearbyPlacesContext + '\n' : ''}
+${ferryStatusContext || ''}
 ${wxSummary}
 
 FULL ITINERARY:
@@ -650,7 +656,9 @@ FUTURE-DAY PLANNING (IMPORTANT):
 - When the user says the trip hasn't started yet or you're answering ahead of the trip, that is normal — still answer concretely from the itinerary.
 
 FERRY STATUS LANGUAGE:
-- The PWA includes a static "Plan B" section with cards titled "...Cancelled" — these are pre-written contingency playbooks, NOT live ferry status. Never tell the traveler a ferry IS cancelled unless they explicitly say Marine Atlantic or the operator has notified them. If asked about live status, point them to marineatlantic.ca/travel-advisory or the operator phone numbers in the itinerary.
+- The PWA includes a static "Plan B" section with cards titled "...Cancelled" — these are pre-written contingency playbooks, NOT live ferry status. Never tell the traveler a ferry IS cancelled unless either (a) a LIVE FERRY STATUS block above shows it, or (b) the operator has notified them.
+- When a LIVE FERRY STATUS block is provided above, treat it as the authoritative source for Marine Atlantic sailings — it comes directly from marineatlantic.ca/travel-advisory. Cite the source URL when you use it. If it shows changes that affect the traveler's booked sailings (Day 4 outbound Jun 30, Day 9 return Jul 5–6), surface those proactively.
+- If no LIVE FERRY STATUS block is present and the user asks about current status, tell them to check marineatlantic.ca/travel-advisory or call the operator — do not guess.
 
 LOCAL RECOMMENDATIONS (IMPORTANT):
 - When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
@@ -679,6 +687,25 @@ export default {
     // Health check
     if (url.pathname === '/api/health') {
       return corsResponse({ status: 'ok', time: new Date().toISOString() });
+    }
+
+    // Live Marine Atlantic ferry status (KV-cached 15 min)
+    // GET /api/ferry-status        → JSON, may serve cache
+    // GET /api/ferry-status?force  → bypass cache and refetch
+    if (url.pathname === '/api/ferry-status' && request.method === 'GET') {
+      const force = url.searchParams.has('force');
+      const advisory = await getFerryAdvisory(env, { force });
+      const status = advisory.error ? 502 : 200;
+      return new Response(JSON.stringify(advisory, null, 2), {
+        status,
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json; charset=utf-8',
+          // Browser-side cache hint matches KV TTL so the PWA can hit this
+          // endpoint freely without hammering it.
+          'Cache-Control': advisory.error ? 'no-store' : 'public, max-age=900',
+        },
+      });
     }
 
     // Chat endpoints: /api/chat/zurich or /api/chat/maritimes
@@ -753,10 +780,23 @@ export default {
           }
         }
 
-        const [weatherResults, actualLocationWeather, nearbyPlaces] = await Promise.all([
+        // Live ferry status — only fetch for maritimes site, and only when the
+        // query plausibly relates to ferries. This keeps Zurich requests fast
+        // and avoids hitting marineatlantic.ca on unrelated chats.
+        let ferryAdvisoryPromise = null;
+        const ferryRelevant = siteKey === 'maritimes' && (
+          /\b(ferr(y|ies)|marine atlantic|crossing|sail(ing)?|cancel|reschedul|north sydney|port aux basques|fundy rose|leif ericson|blue puttees|ala'?suinu|advisor|delay|on time)\b/i.test(message)
+          || /\b(jun(e)?\s*30|jul(y)?\s*5|day\s*[49])\b/i.test(message)
+        );
+        if (ferryRelevant) {
+          ferryAdvisoryPromise = getFerryAdvisory(env).catch(() => null);
+        }
+
+        const [weatherResults, actualLocationWeather, nearbyPlaces, ferryAdvisory] = await Promise.all([
           Promise.all(weatherPromises),
           actualLocationWeatherPromise,
           nearbyPlacesPromise,
+          ferryAdvisoryPromise,
         ]);
 
         let wxSummary = '';
@@ -831,7 +871,14 @@ export default {
         // Build nearby-places context for recommendation queries
         const nearbyPlacesContext = formatPlacesForPrompt(nearbyPlaces);
 
-        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext);
+        // Build live ferry-status context (maritimes only, when relevant)
+        const ferryStatusContext = ferryAdvisory
+          ? formatAdvisoryForPrompt(ferryAdvisory, {
+              tripDays: ['2026-06-30', '2026-07-05', '2026-07-06'],
+            })
+          : '';
+
+        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext, ferryStatusContext);
 
         // Build messages array
         const msgs = [{ role: 'system', content: systemPrompt }];
