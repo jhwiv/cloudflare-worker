@@ -652,7 +652,8 @@ YOUR ROLE:
 
 FUTURE-DAY PLANNING (IMPORTANT):
 - The traveler may ask about ANY day on the itinerary, not just today. If their question references a specific date ("June 30", "Day 4"), a future event ("before the ferry", "pre-ferry dinner", "morning we leave Lunenburg"), or a place that is not their current location ("in North Sydney", "in Port aux Basques"), answer using the itinerary data for THAT day and THAT place. Do NOT default to current GPS or today's date for planning questions.
-- For pre-ferry dinner questions on Day 4 (Tue Jun 30) or Day 9 (Sun Jul 5): state the ferry departure time (11:45 PM local), the 9:45 PM check-in deadline, and name 2–3 specific dinner options near the relevant terminal pulled from the itinerary stops for that day. Use the restaurants listed in the Day 4 / Day 9 stops — do not invent new ones.
+- Day 4 dinner is BOOKED: Black Spoon Bistro, Sydney, 7:00 PM ADT (Tue Jun 30, confirmed reservation). For Day 4 pre-ferry dinner questions, lead with that fact — do not present it as one of several options. Add the 9:45 PM check-in / 11:45 PM ADT departure reminder.
+- For pre-ferry dinner questions on Day 9 (Sun Jul 5, return ferry from Port aux Basques): state the 11:45 PM NDT departure, 9:45 PM check-in deadline, and name 2–3 specific dinner options near the Port aux Basques terminal pulled from the Day 9 stops. Use the restaurants listed in the Day 9 stops — do not invent new ones.
 - When the user says the trip hasn't started yet or you're answering ahead of the trip, that is normal — still answer concretely from the itinerary.
 
 FERRY STATUS LANGUAGE:
@@ -1034,7 +1035,7 @@ const MARITIMES_ITINERARY = `{
       "stops": [
         { "time": "8:00 AM ADT", "title": "Early Start — Lunenburg → North Sydney", "desc": "~4.5-hour, ~395 km drive. Longest driving day. Coffee stop in Antigonish (~halfway)." },
         { "time": "~1:00 PM ADT", "title": "Arrive North Sydney area", "desc": "Plan a relaxed afternoon and pre-ferry dinner. Marine Atlantic terminal: 355 Purves St, North Sydney (44 nautical miles east of Sydney centre)." },
-        { "time": "7:00–8:30 PM ADT", "title": "Pre-Ferry Dinner — North Sydney / Sydney", "desc": "Sit-down dinner before ferry check-in. Solid options: Black Spoon Bistro (320 Esplanade, Sydney — chef-driven, ~12 min drive from terminal), Governors Pub & Eatery (233 Esplanade, Sydney waterfront — Cape Breton craft beer, hearty plates), Lobster Pound & Moore (3500 Hwy 4, Edwardsville — closest sit-down to the terminal, ~10 min, lobster rolls + chowder). Keep dinner to ~75 min so you have a buffer for check-in." },
+        { "time": "7:00 PM ADT", "title": "Pre-Ferry Dinner — Black Spoon Bistro (CONFIRMED RESERVATION)", "desc": "Confirmed dinner reservation at Black Spoon Bistro, 320 Esplanade, Sydney — chef-driven menu, ~12 min drive from the North Sydney terminal. Reservation is for 7:00 PM ADT. Aim to be finished by ~8:30 PM so you have a comfortable buffer for the 9:45 PM ferry check-in.", "confirmed": true },
         { "time": "9:45 PM ADT", "title": "FERRY CHECK-IN (mandatory)", "desc": "Marine Atlantic requires check-in 2 hours before sailing. Reservations — including booked cabins — are CANCELLED if you miss check-in. Terminal address: 355 Purves St, North Sydney. Have reservation number + ID ready.", "critical": true },
         { "time": "11:45 PM ADT", "title": "Marine Atlantic departs North Sydney", "desc": "Overnight crossing to Port aux Basques, ~7 hours. Cabin booked. Clocks lose 30 minutes overnight (ADT → NDT). Scheduled arrival ~7:30 AM NDT." }
       ]
@@ -1127,6 +1128,7 @@ const MARITIMES_ITINERARY = `{
     { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "departs": "11:45 PM NDT", "checkIn": "9:45 PM NDT (mandatory — 2 hr prior; reservations cancelled if missed)", "terminal": "Caribou Rd, Port aux Basques", "duration": "~7 hours (overnight)", "arrives": "~7:00 AM ADT", "note": "Boards NDT, arrives ADT — clocks gain 30 minutes during the overnight." }
   ],
   "dining": [
-    { "day": 3, "date": "Mon Jun 29", "time_local": "8:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-29T20:00:00-03:00", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" }
+    { "day": 3, "date": "Mon Jun 29", "time_local": "8:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-29T20:00:00-03:00", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" },
+    { "day": 4, "date": "Tue Jun 30", "time_local": "7:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-30T19:00:00-03:00", "venue": "Black Spoon Bistro", "location": "Sydney, NS (320 Esplanade) — pre-ferry, ~12 min from North Sydney terminal", "status": "Confirmed" }
   ]
 }`;
