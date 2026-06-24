@@ -4,3 +4,18 @@ compatibility_date = "2024-01-01"
 
 [ai]
 binding = "AI"
+
+# ── OPTIONAL: Live Marine Atlantic ferry-status cache (15-min TTL) ─────
+# The /api/ferry-status endpoint and the concierge's live-status injection
+# work WITHOUT this binding — they just fetch marineatlantic.ca fresh on
+# every request. Adding KV reduces origin load to ~4 fetches per hour.
+#
+# To enable:
+#   1. wrangler kv namespace create FERRY_KV
+#      → prints something like:  id = "abc123..."
+#   2. Uncomment the block below and paste the id.
+#   3. Redeploy.
+#
+# [[kv_namespaces]]
+# binding = "FERRY_KV"
+# id = "PASTE_KV_NAMESPACE_ID_HERE"

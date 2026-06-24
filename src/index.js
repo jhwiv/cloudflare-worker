@@ -1,6 +1,11 @@
 // Multi-Site Trip Chat Concierge — Cloudflare Worker
 // Uses Cloudflare Workers AI (streaming) + Open-Meteo (weather)
-// Routes: /api/chat/zurich and /api/chat/maritimes
+// Routes:
+//   /api/chat/zurich, /api/chat/maritimes — concierge chat
+//   /api/ferry-status — live Marine Atlantic advisory (KV-cached 15 min)
+//   /api/health — healthcheck
+
+import { getFerryAdvisory, formatAdvisoryForPrompt } from './ferry-status.js';
 
 // ── CORS helpers ───────────────────────────────────────
 const CORS_HEADERS = {
@@ -177,8 +182,58 @@ function getItineraryLocation(siteKey, nowUTC) {
 
 // ── Recommendation detection ─────────────────────────
 function isRecommendationQuery(message) {
-  const keywords = /\b(breakfast|brunch|lunch|dinner|coffee|café|cafe|eat|restaurant|bar|pub|drink|food|recommend|suggestion|where should|good place|nearby|snack|bakery|pastry|grocery|supermarket|pharmacy|gelato|ice cream)\b/i;
+  const keywords = /\b(breakfast|brunch|lunch|dinner|coffee|café|cafe|eat|restaurant|bar|pub|drink|food|recommend|suggestion|where should|good place|nearby|snack|bakery|pastry|grocery|supermarket|pharmacy|gelato|ice cream|pre-?ferry|before the ferry|before ferry)\b/i;
   return keywords.test(message);
+}
+
+// ── Future-day / place override for Overpass searches ──────────
+// When the user references a specific date, day number, or place that isn't
+// their current location, return coordinates for THAT place instead of "now".
+// Returns { lat, lng, timezone, label } or null.
+function resolveQueryLocation(siteKey, message) {
+  if (siteKey !== 'maritimes') return null;
+  const msg = message.toLowerCase();
+
+  // Explicit place mentions — highest priority
+  const placeMap = [
+    { match: /\b(north sydney|sydney ns|cape breton terminal|marine atlantic terminal)\b/, lat: 46.2034, lng: -60.2391, tz: 'America/Halifax', label: 'North Sydney ferry terminal area' },
+    { match: /\b(port aux basques|channel-?port aux basques)\b/, lat: 47.5714, lng: -59.1351, tz: 'America/St_Johns', label: 'Port aux Basques' },
+    { match: /\b(lunenburg)\b/, lat: 44.3890, lng: -64.5205, tz: 'America/Halifax', label: 'Lunenburg' },
+    { match: /\b(digby)\b/, lat: 44.6206, lng: -65.7596, tz: 'America/Halifax', label: 'Digby' },
+    { match: /\b(twillingate)\b/, lat: 49.6514, lng: -54.7681, tz: 'America/St_Johns', label: 'Twillingate' },
+    { match: /\b(fogo island|fogo)\b/, lat: 49.4817, lng: -54.7831, tz: 'America/St_Johns', label: 'Fogo Island' },
+    { match: /\b(pictou)\b/, lat: 45.6797, lng: -62.7126, tz: 'America/Halifax', label: 'Pictou' },
+    { match: /\b(fredericton)\b/, lat: 45.9636, lng: -66.6431, tz: 'America/New_York', label: 'Fredericton' },
+    { match: /\b(portland)\b/, lat: 43.6591, lng: -70.2568, tz: 'America/New_York', label: 'Portland, ME' },
+    { match: /\b(saint john|st\.? john nb)\b/, lat: 45.2733, lng: -66.0633, tz: 'America/Halifax', label: 'Saint John, NB' },
+  ];
+  for (const p of placeMap) {
+    if (p.match.test(msg)) return { lat: p.lat, lng: p.lng, timezone: p.tz, label: p.label };
+  }
+
+  // Date / day references — map to itinerary segment
+  const dateMap = [
+    { match: /\b(jun(e)?\s*27|day\s*1)\b/, lat: 43.6591, lng: -70.2568, tz: 'America/New_York', label: 'Day 1 — Portland, ME' },
+    { match: /\b(jun(e)?\s*28|day\s*2)\b/, lat: 44.6206, lng: -65.7596, tz: 'America/Halifax', label: 'Day 2 — Digby, NS' },
+    { match: /\b(jun(e)?\s*29|day\s*3)\b/, lat: 44.3890, lng: -64.5205, tz: 'America/Halifax', label: 'Day 3 — Lunenburg, NS' },
+    { match: /\b(jun(e)?\s*30|day\s*4)\b/, lat: 46.2034, lng: -60.2391, tz: 'America/Halifax', label: 'Day 4 — North Sydney (pre-ferry)' },
+    { match: /\b(jul(y)?\s*1|day\s*5)\b/, lat: 49.6514, lng: -54.7681, tz: 'America/St_Johns', label: 'Day 5 — Twillingate, NL' },
+    { match: /\b(jul(y)?\s*[234]|day\s*[678])\b/, lat: 49.4817, lng: -54.7831, tz: 'America/St_Johns', label: 'Days 6–8 — Fogo Island' },
+    { match: /\b(jul(y)?\s*5|day\s*9)\b/, lat: 47.5714, lng: -59.1351, tz: 'America/St_Johns', label: 'Day 9 — Port aux Basques (pre-ferry)' },
+    { match: /\b(jul(y)?\s*6|day\s*10)\b/, lat: 45.6797, lng: -62.7126, tz: 'America/Halifax', label: 'Day 10 — Pictou, NS' },
+    { match: /\b(jul(y)?\s*7|day\s*11)\b/, lat: 45.9636, lng: -66.6431, tz: 'America/New_York', label: 'Day 11 — Fredericton, NB' },
+    { match: /\b(jul(y)?\s*8|day\s*12)\b/, lat: 43.6591, lng: -70.2568, tz: 'America/New_York', label: 'Day 12 — Portland, ME' },
+  ];
+  for (const d of dateMap) {
+    if (d.match.test(msg)) return { lat: d.lat, lng: d.lng, timezone: d.tz, label: d.label };
+  }
+
+  // "Before the ferry" / "pre-ferry" without other context — default to Day 4 (next ferry)
+  if (/\b(pre-?ferry|before the ferry|before ferry|ferry dinner|near the ferry)\b/.test(msg)) {
+    return { lat: 46.2034, lng: -60.2391, timezone: 'America/Halifax', label: 'Pre-ferry — North Sydney' };
+  }
+
+  return null;
 }
 
 // ── Category mapping for Overpass queries ────────────
@@ -569,7 +624,7 @@ LOCAL RECOMMENDATIONS (IMPORTANT):
     ],
     defaultGeoNote: 'They are NOT currently near any of the itinerary stops — they may be planning ahead.',
     localTimezone: 'America/New_York',
-    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext) => {
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext, ferryStatusContext) => {
       const timeLabel = inferredLocation?.city || 'local time';
       return `You are a knowledgeable, friendly travel concierge for a 12-day Maritimes Grand Loop road trip (Newfoundland & Nova Scotia, Summer 2026). You are embedded in the trip's PWA guide.
 
@@ -578,6 +633,7 @@ CRITICAL: Pay close attention to the travelers' CURRENT LOCATION and TIME. Do NO
 CURRENT DATE/TIME (${timeLabel}): ${localTime}
 ${locationNote}
 ${nearbyPlacesContext ? '\n' + nearbyPlacesContext + '\n' : ''}
+${ferryStatusContext || ''}
 ${wxSummary}
 
 FULL ITINERARY:
@@ -586,13 +642,24 @@ ${MARITIMES_ITINERARY}
 YOUR ROLE:
 - Help the travelers decide what to do next based on: the itinerary, current time, weather, and their location.
 - Be specific — use place names, driving distances, ferry times, and hotel names from the itinerary.
-- For ferry crossings: remind them of departure times and that they should arrive early.
+- For ferry crossings: state the actual departure time, the mandatory check-in time (2 hours prior for Marine Atlantic — reservations are cancelled if missed), and the terminal address from the itinerary data.
 - For Fogo Island days (6–8): suggest activities, hikes, and local experiences.
 - Reference hotels by name and location.
 - For driving days: mention approximate drive times and suggested stops.
 - Keep answers concise — 2-4 short paragraphs max. Use natural language, not bullet lists.
 - You can respond in English or match the traveler's language.
 - The travelers are a group including Molly and Bonie.
+
+FUTURE-DAY PLANNING (IMPORTANT):
+- The traveler may ask about ANY day on the itinerary, not just today. If their question references a specific date ("June 30", "Day 4"), a future event ("before the ferry", "pre-ferry dinner", "morning we leave Lunenburg"), or a place that is not their current location ("in North Sydney", "in Port aux Basques"), answer using the itinerary data for THAT day and THAT place. Do NOT default to current GPS or today's date for planning questions.
+- For pre-ferry dinner questions on Day 4 (Tue Jun 30) or Day 9 (Sun Jul 5): state the ferry departure time (11:45 PM local), the 9:45 PM check-in deadline, and name 2–3 specific dinner options near the relevant terminal pulled from the itinerary stops for that day. Use the restaurants listed in the Day 4 / Day 9 stops — do not invent new ones.
+- When the user says the trip hasn't started yet or you're answering ahead of the trip, that is normal — still answer concretely from the itinerary.
+
+FERRY STATUS LANGUAGE:
+- The PWA includes a static "Plan B" section with cards titled "...Cancelled" — these are pre-written contingency playbooks, NOT live ferry status. Never tell the traveler a ferry IS cancelled unless either (a) a LIVE FERRY STATUS block above shows it, or (b) the operator has notified them.
+- When a LIVE FERRY STATUS block is provided above, treat it as the authoritative source for Marine Atlantic sailings — it comes directly from marineatlantic.ca/travel-advisory. Cite the source URL when you use it. If it shows changes that affect the traveler's booked sailings (Day 4 outbound Jun 30, Day 9 return Jul 5–6), surface those proactively.
+- If no LIVE FERRY STATUS block is present and the user asks about current status, tell them to check marineatlantic.ca/travel-advisory or call the operator — do not guess.
+
 LOCAL RECOMMENDATIONS (IMPORTANT):
 - When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
 - If no verified list is provided, use your general knowledge but note that opening hours should be confirmed.
@@ -620,6 +687,25 @@ export default {
     // Health check
     if (url.pathname === '/api/health') {
       return corsResponse({ status: 'ok', time: new Date().toISOString() });
+    }
+
+    // Live Marine Atlantic ferry status (KV-cached 15 min)
+    // GET /api/ferry-status        → JSON, may serve cache
+    // GET /api/ferry-status?force  → bypass cache and refetch
+    if (url.pathname === '/api/ferry-status' && request.method === 'GET') {
+      const force = url.searchParams.has('force');
+      const advisory = await getFerryAdvisory(env, { force });
+      const status = advisory.error ? 502 : 200;
+      return new Response(JSON.stringify(advisory, null, 2), {
+        status,
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json; charset=utf-8',
+          // Browser-side cache hint matches KV TTL so the PWA can hit this
+          // endpoint freely without hammering it.
+          'Cache-Control': advisory.error ? 'no-store' : 'public, max-age=900',
+        },
+      });
     }
 
     // Chat endpoints: /api/chat/zurich or /api/chat/maritimes
@@ -677,21 +763,40 @@ export default {
         }
 
         // Determine if we need to fetch nearby places (recommendation query)
+        // Priority for search center:
+        //   1. Explicit place/date in the message (resolveQueryLocation)
+        //   2. GPS
+        //   3. Itinerary-inferred current location
         let nearbyPlacesPromise = null;
+        let queryLocation = null;
         if (isRecommendationQuery(message)) {
-          const searchLat = lat ?? inferredLocation?.lat;
-          const searchLng = lng ?? inferredLocation?.lng;
-          const searchTz = inferredLocation?.timezone || site.localTimezone;
+          queryLocation = resolveQueryLocation(siteKey, message);
+          const searchLat = queryLocation?.lat ?? lat ?? inferredLocation?.lat;
+          const searchLng = queryLocation?.lng ?? lng ?? inferredLocation?.lng;
+          const searchTz = queryLocation?.timezone || inferredLocation?.timezone || site.localTimezone;
           if (searchLat != null && searchLng != null) {
             const cats = getCategoriesFromMessage(message);
             nearbyPlacesPromise = getNearbyPlaces(searchLat, searchLng, cats, searchTz);
           }
         }
 
-        const [weatherResults, actualLocationWeather, nearbyPlaces] = await Promise.all([
+        // Live ferry status — only fetch for maritimes site, and only when the
+        // query plausibly relates to ferries. This keeps Zurich requests fast
+        // and avoids hitting marineatlantic.ca on unrelated chats.
+        let ferryAdvisoryPromise = null;
+        const ferryRelevant = siteKey === 'maritimes' && (
+          /\b(ferr(y|ies)|marine atlantic|crossing|sail(ing)?|cancel|reschedul|north sydney|port aux basques|fundy rose|leif ericson|blue puttees|ala'?suinu|advisor|delay|on time)\b/i.test(message)
+          || /\b(jun(e)?\s*30|jul(y)?\s*5|day\s*[49])\b/i.test(message)
+        );
+        if (ferryRelevant) {
+          ferryAdvisoryPromise = getFerryAdvisory(env).catch(() => null);
+        }
+
+        const [weatherResults, actualLocationWeather, nearbyPlaces, ferryAdvisory] = await Promise.all([
           Promise.all(weatherPromises),
           actualLocationWeatherPromise,
           nearbyPlacesPromise,
+          ferryAdvisoryPromise,
         ]);
 
         let wxSummary = '';
@@ -704,9 +809,14 @@ export default {
           wxSummary += formatWeather(actualLocationWeather, actualLocationLabel);
         }
 
-        // Location context — priority: GPS > itinerary inference > unknown
+        // Location context — priority: explicit-query location > GPS > itinerary inference > unknown
         let locationNote = '';
-        if (lat != null && lng != null) {
+        if (queryLocation) {
+          locationNote = `QUERY CONTEXT: The user is asking about "${queryLocation.label}" — focus your answer and any recommendations on THAT place, not on the traveler's current position.`;
+          if (lat != null && lng != null) {
+            locationNote += ` (Their actual GPS is ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}, but the question is about a different place/day on the itinerary.)`;
+          }
+        } else if (lat != null && lng != null) {
           // GPS available — include raw coordinates + geofence check
           locationNote = `USER'S CURRENT GPS: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}.`;
           let matched = false;
@@ -761,7 +871,14 @@ export default {
         // Build nearby-places context for recommendation queries
         const nearbyPlacesContext = formatPlacesForPrompt(nearbyPlaces);
 
-        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext);
+        // Build live ferry-status context (maritimes only, when relevant)
+        const ferryStatusContext = ferryAdvisory
+          ? formatAdvisoryForPrompt(ferryAdvisory, {
+              tripDays: ['2026-06-30', '2026-07-05', '2026-07-06'],
+            })
+          : '';
+
+        const systemPrompt = site.buildPrompt(wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext, ferryStatusContext);
 
         // Build messages array
         const msgs = [{ role: 'system', content: systemPrompt }];
@@ -915,8 +1032,11 @@ const MARITIMES_ITINERARY = `{
       "day": 4, "label": "Lunenburg → North Sydney → Overnight Ferry", "date": "Tue Jun 30", "timezone": "ADT (Atlantic Time, UTC-3) until boarding Marine Atlantic ferry; ferry crosses into NDT (Newfoundland Time, UTC-2:30) overnight.",
       "depart": "8:00 AM ADT",
       "stops": [
-        { "time": "8:00 AM ADT", "title": "Early Start", "desc": "~4.5-hour drive to North Sydney, Cape Breton. Longest driving day." },
-        { "time": "Evening", "title": "Overnight Ferry to Newfoundland", "desc": "Marine Atlantic ferry, 6–8 hour crossing. Cabin booked." }
+        { "time": "8:00 AM ADT", "title": "Early Start — Lunenburg → North Sydney", "desc": "~4.5-hour, ~395 km drive. Longest driving day. Coffee stop in Antigonish (~halfway)." },
+        { "time": "~1:00 PM ADT", "title": "Arrive North Sydney area", "desc": "Plan a relaxed afternoon and pre-ferry dinner. Marine Atlantic terminal: 355 Purves St, North Sydney (44 nautical miles east of Sydney centre)." },
+        { "time": "7:00–8:30 PM ADT", "title": "Pre-Ferry Dinner — North Sydney / Sydney", "desc": "Sit-down dinner before ferry check-in. Solid options: Black Spoon Bistro (320 Esplanade, Sydney — chef-driven, ~12 min drive from terminal), Governors Pub & Eatery (233 Esplanade, Sydney waterfront — Cape Breton craft beer, hearty plates), Lobster Pound & Moore (3500 Hwy 4, Edwardsville — closest sit-down to the terminal, ~10 min, lobster rolls + chowder). Keep dinner to ~75 min so you have a buffer for check-in." },
+        { "time": "9:45 PM ADT", "title": "FERRY CHECK-IN (mandatory)", "desc": "Marine Atlantic requires check-in 2 hours before sailing. Reservations — including booked cabins — are CANCELLED if you miss check-in. Terminal address: 355 Purves St, North Sydney. Have reservation number + ID ready.", "critical": true },
+        { "time": "11:45 PM ADT", "title": "Marine Atlantic departs North Sydney", "desc": "Overnight crossing to Port aux Basques, ~7 hours. Cabin booked. Clocks lose 30 minutes overnight (ADT → NDT). Scheduled arrival ~7:30 AM NDT." }
       ]
     },
     {
@@ -941,9 +1061,11 @@ const MARITIMES_ITINERARY = `{
       "day": 9, "label": "Fogo → Port aux Basques (Return Ferry)", "date": "Sun Jul 5", "timezone": "Starts NDT (Newfoundland) and ends on the overnight Marine Atlantic ferry which crosses back into ADT.",
       "depart": "7:00 AM NDT",
       "stops": [
-        { "time": "Morning", "title": "Ferry back to mainland", "desc": "~45 min crossing." },
+        { "time": "Morning", "title": "Ferry back to mainland", "desc": "Fogo Island → Farewell, ~45 min crossing." },
         { "time": "All Day", "title": "Drive: Farewell → Port aux Basques", "desc": "~560 km, ~6.5 hours. Grand Falls-Windsor (~2.5 hrs) for the Gorge. Deer Lake (~4.5 hrs) for lunch." },
-        { "time": "Evening", "title": "Overnight Ferry to Nova Scotia", "desc": "Another night sleeping on the water." }
+        { "time": "~6:00–7:30 PM NDT", "title": "Pre-Ferry Dinner — Port aux Basques", "desc": "Eat before terminal check-in. Limited but solid: Alma’s Family Restaurant (Caribou Rd — home-style cod, ~5 min from terminal), Hot Dawgs Snack Bar (Main St — quick local diner), or the dining room at St. Christopher’s Hotel (Caribou Rd — closest hotel restaurant to the terminal). Town options thin out late; aim to be seated by 6:30 PM NDT." },
+        { "time": "9:45 PM NDT", "title": "FERRY CHECK-IN (mandatory)", "desc": "Marine Atlantic requires check-in 2 hours before sailing. Missed check-in = reservation cancelled, including cabin. Port aux Basques terminal: Caribou Rd, Port aux Basques.", "critical": true },
+        { "time": "11:45 PM NDT", "title": "Marine Atlantic departs Port aux Basques", "desc": "Overnight crossing back to North Sydney, ~7 hours. Clocks GAIN 30 minutes overnight (NDT → ADT). Scheduled arrival ~7:00 AM ADT." }
       ]
     },
     {
@@ -999,10 +1121,10 @@ const MARITIMES_ITINERARY = `{
   },
   "ferries": [
     { "day": 2, "route": "Saint John → Digby", "vessel": "MV Fundy Rose", "duration": "2.5 hours", "departs": "2:15 PM ADT", "arrives": "4:45 PM ADT" },
-    { "day": 4, "route": "North Sydney → Port aux Basques", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)", "note": "Boards ADT, arrives NDT — clocks lose 30 minutes during the overnight." },
+    { "day": 4, "route": "North Sydney → Port aux Basques", "vessel": "Marine Atlantic", "departs": "11:45 PM ADT", "checkIn": "9:45 PM ADT (mandatory — 2 hr prior; reservations cancelled if missed)", "terminal": "355 Purves St, North Sydney", "duration": "~7 hours (overnight)", "arrives": "~7:30 AM NDT", "note": "Boards ADT, arrives NDT — clocks lose 30 minutes during the overnight." },
     { "day": 6, "route": "Farewell → Fogo Island", "duration": "~45 min" },
     { "day": 9, "route": "Fogo Island → Farewell", "duration": "~45 min" },
-    { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "duration": "6–8 hours (overnight)", "note": "Boards NDT, arrives ADT — clocks gain 30 minutes during the overnight." }
+    { "day": 9, "route": "Port aux Basques → North Sydney", "vessel": "Marine Atlantic", "departs": "11:45 PM NDT", "checkIn": "9:45 PM NDT (mandatory — 2 hr prior; reservations cancelled if missed)", "terminal": "Caribou Rd, Port aux Basques", "duration": "~7 hours (overnight)", "arrives": "~7:00 AM ADT", "note": "Boards NDT, arrives ADT — clocks gain 30 minutes during the overnight." }
   ],
   "dining": [
     { "day": 3, "date": "Mon Jun 29", "time_local": "8:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-29T20:00:00-03:00", "venue": "Beach Pea Kitchen & Bar", "location": "Lunenburg, NS", "status": "Confirmed" }
