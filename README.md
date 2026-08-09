@@ -1,9 +1,10 @@
 # cloudflare-worker
 
-Multi-site trip-concierge worker for the Maritimes Grand Loop and Zürich
-Weekend PWAs. Streams from Cloudflare Workers AI (Llama 3.3) with weather
-from Open-Meteo, nearby-places from OpenStreetMap/Overpass, and live ferry
-status from Marine Atlantic.
+Multi-site trip-concierge worker for the Maritimes Grand Loop, Zürich
+Weekend, and London/Normandy/Nuremberg/Porto (`wwii2026`) trip sites.
+Streams from Cloudflare Workers AI (Llama 3.3) with weather from
+Open-Meteo, nearby-places from OpenStreetMap/Overpass, and live ferry
+status from Marine Atlantic (Maritimes only).
 
 Auto-deploys from `main` via GitHub Actions (`cloudflare/wrangler-action@v3`).
 
@@ -15,6 +16,7 @@ Auto-deploys from `main` via GitHub Actions (`cloudflare/wrangler-action@v3`).
 | `/api/ferry-status` | GET | Live Marine Atlantic advisory. Parses [marineatlantic.ca/travel-advisory](https://www.marineatlantic.ca/travel-advisory) and returns structured JSON. KV-cached 15 min. Add `?force` to bypass cache. |
 | `/api/chat/maritimes` | POST | Concierge chat for the Maritimes site. Body: `{message, history, latitude?, longitude?, gpsStatus?, localTime?, activeTab?}`. Returns a streaming text response. |
 | `/api/chat/zurich` | POST | Same as above for the Zürich site. |
+| `/api/chat/wwii2026` | POST | Same as above for the London/Normandy/Nuremberg/Porto trip site (aripshitadventure repo, Oct 2026). Note: `resolveQueryLocation`'s explicit day/place-name override (e.g. "before the ferry", "Day 4") is Maritimes-only — this site falls back to GPS/itinerary-inferred location for all queries, so a chat asking about a specific future day by name will still answer using the traveler's *current* inferred location rather than that day's city. |
 
 ### `/api/ferry-status` response shape
 

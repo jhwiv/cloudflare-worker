@@ -125,7 +125,29 @@ const ITINERARY_SCHEDULE = {
       city: 'Zürich (departing)', timezone: 'Europe/Zurich', lat: 47.3769, lng: 8.5417,
       note: 'The traveler should be heading to ZRH airport or at the airport. Flight departs 8:25 PM.' },
   ],
+  wwii2026: [
+    // 15-day London / Normandy / Nuremberg / Porto trip, Oct 10-24 2026.
+    // Segments are calendar-day (local midnight-to-midnight) rather than
+    // precise clock times, matching each day's own `city` field from the
+    // verified plan JSON rather than inventing minute-level timings.
+    { from: '2026-10-09T23:00:00Z', to: '2026-10-10T23:00:00Z', city: 'London', timezone: 'Europe/London', lat: 51.5074, lng: -0.1278, note: 'Day 1: Evening walk through Mayfair after check-in, martini at The Dorchester' },
+    { from: '2026-10-10T23:00:00Z', to: '2026-10-11T23:00:00Z', city: 'London', timezone: 'Europe/London', lat: 51.5074, lng: -0.1278, note: 'Day 2: Stand in Churchill\'s Map Room where the war was directed' },
+    { from: '2026-10-11T23:00:00Z', to: '2026-10-12T23:00:00Z', city: 'London', timezone: 'Europe/London', lat: 51.5074, lng: -0.1278, note: 'Day 3: Walk the Holocaust Exhibition and WWII galleries at IWM' },
+    { from: '2026-10-12T23:00:00Z', to: '2026-10-13T23:00:00Z', city: 'London', timezone: 'Europe/London', lat: 51.5074, lng: -0.1278, note: 'Day 4: Evening West End show — history on stage after a museum day' },
+    { from: '2026-10-13T23:00:00Z', to: '2026-10-14T23:00:00Z', city: 'London', timezone: 'Europe/London', lat: 51.5074, lng: -0.1278, note: 'Day 5: Stand where Anne Boleyn was beheaded, see the Crown Jewels' },
+    { from: '2026-10-14T22:00:00Z', to: '2026-10-15T22:00:00Z', city: 'Normandy', timezone: 'Europe/Paris', lat: 49.2764, lng: -0.7024, note: 'Day 6: Stand at the cliff edge above Omaha Beach at dawn' },
+    { from: '2026-10-15T22:00:00Z', to: '2026-10-16T22:00:00Z', city: 'Normandy', timezone: 'Europe/Paris', lat: 49.2764, lng: -0.7024, note: 'Day 7: Walk the Canadian beach at Juno, then the Caen peace museum' },
+    { from: '2026-10-16T22:00:00Z', to: '2026-10-17T22:00:00Z', city: 'Nuremberg', timezone: 'Europe/Berlin', lat: 49.4521, lng: 11.0767, note: 'Day 8: Sit in Courtroom 600 where the architects of the Holocaust faced justice' },
+    { from: '2026-10-17T22:00:00Z', to: '2026-10-18T22:00:00Z', city: 'Nuremberg', timezone: 'Europe/Berlin', lat: 49.4521, lng: 11.0767, note: 'Day 9: Walk the ramparts of Kaiserburg at golden hour' },
+    { from: '2026-10-18T22:00:00Z', to: '2026-10-19T22:00:00Z', city: 'Nuremberg', timezone: 'Europe/Berlin', lat: 49.4521, lng: 11.0767, note: 'Day 10: Confront the Rally Grounds, then fly to Portugal\'s wine capital' },
+    { from: '2026-10-19T23:00:00Z', to: '2026-10-20T23:00:00Z', city: 'Porto', timezone: 'Europe/Lisbon', lat: 41.1579, lng: -8.6291, note: 'Day 11: First port wine tasting overlooking the Douro at sunset' },
+    { from: '2026-10-20T23:00:00Z', to: '2026-10-21T23:00:00Z', city: 'Porto', timezone: 'Europe/Lisbon', lat: 41.1579, lng: -8.6291, note: 'Day 12: Private cellar tour at Graham\'s, then francesinha for lunch' },
+    { from: '2026-10-21T23:00:00Z', to: '2026-10-22T23:00:00Z', city: 'Porto', timezone: 'Europe/Lisbon', lat: 41.1579, lng: -8.6291, note: 'Day 13: Quinta do Crasto vineyard lunch overlooking terraced vines' },
+    { from: '2026-10-22T23:00:00Z', to: '2026-10-23T23:00:00Z', city: 'Porto', timezone: 'Europe/Lisbon', lat: 41.1579, lng: -8.6291, note: 'Day 14: Morning at Livraria Lello, then sunset port at Taylor\'s terrace' },
+    { from: '2026-10-23T23:00:00Z', to: '2026-10-24T23:00:00Z', city: 'Porto', timezone: 'Europe/Lisbon', lat: 41.1579, lng: -8.6291, note: 'Day 15: Morning at leisure, then fly Porto → Newark' },
+  ],
   maritimes: [
+
     { from: '2026-06-27T12:00Z', to: '2026-06-28T04:00Z',
       city: 'Portland, ME', timezone: 'America/New_York', lat: 43.6591, lng: -70.2568,
       note: 'Day 1: Arriving in Portland, meeting Molly & Bonie.' },
@@ -674,6 +696,58 @@ LOCAL RECOMMENDATIONS (IMPORTANT):
 - Do NOT fabricate place names, but DO use your real knowledge of well-known establishments in these areas.`;
     },
   },
+
+  wwii2026: {
+    weatherLocations: [
+      { lat: 51.5074, lng: -0.1278, tz: 'Europe/London', label: 'LONDON' },
+      { lat: 49.2764, lng: -0.7024, tz: 'Europe/Paris', label: 'NORMANDY' },
+      { lat: 49.4521, lng: 11.0767, tz: 'Europe/Berlin', label: 'NUREMBERG' },
+      { lat: 41.1579, lng: -8.6291, tz: 'Europe/Lisbon', label: 'PORTO' },
+    ],
+    geoChecks: [
+      { lat: 51.5074, lng: -0.1278, radius: 0.5, label: 'They appear to be IN London right now.' },
+      { lat: 49.2764, lng: -0.7024, radius: 0.5, label: 'They appear to be near Bayeux/Normandy right now.' },
+      { lat: 49.4521, lng: 11.0767, radius: 0.5, label: 'They appear to be IN Nuremberg right now.' },
+      { lat: 41.1579, lng: -8.6291, radius: 0.5, label: 'They appear to be IN Porto right now.' },
+    ],
+    defaultGeoNote: 'They are NOT currently near London, Normandy, Nuremberg, or Porto — they may be planning ahead.',
+    localTimezone: 'Europe/London',
+    buildPrompt: (wxSummary, locationNote, localTime, inferredLocation, nearbyPlacesContext) => {
+      const timeLabel = inferredLocation?.city || 'local time';
+      return `You are a knowledgeable, friendly travel concierge for a 15-day trip through London, Normandy, Nuremberg, and Porto (Oct 10-24, 2026), with a cultural WWII-history focus for the first three legs and a relaxed wine-country finish in Porto. You are embedded in the trip's guide website.
+
+CRITICAL: Pay close attention to the traveler's CURRENT LOCATION and TIME. Do NOT assume they are in any particular city unless the location data confirms it. They may be browsing any day of the itinerary regardless of where they physically are.
+
+CURRENT DATE/TIME (${timeLabel}): ${localTime}
+${locationNote}
+${nearbyPlacesContext ? '\n' + nearbyPlacesContext + '\n' : ''}
+${wxSummary}
+
+FULL ITINERARY:
+${WWII_ITINERARY}
+
+YOUR ROLE:
+- Help the traveler decide what to do next based on: the itinerary, current time, weather, and their location.
+- Be specific — use times, venue names, and hotel names from the itinerary.
+- For the WWII sites (Churchill War Rooms, IWM, the Normandy beaches, the Nuremberg Trials memorial and Rally Grounds), give context that helps the visit land, not just logistics.
+- Reference restaurants by name and the day they're booked.
+- Nuremberg's Memorium Nürnberger Prozesse (Courtroom 600) is only open to the public on weekends when court isn't in session — Day 8 (Saturday) is scheduled deliberately; don't suggest moving it.
+- The Douro Valley day trip (Day 13) is a long day with a private driver — don't suggest replacing it with something requiring the traveler to drive themselves.
+- Keep answers concise — 2-4 short paragraphs max. Use natural language, not bullet lists, except for the recommendation format below.
+- You can respond in English or match the traveler's language.
+
+LOCAL RECOMMENDATIONS (IMPORTANT):
+- When a VERIFIED NEARBY PLACES list is provided above, you MUST recommend ONLY from that list. Do not recommend places not on the list. These are confirmed to exist and be open right now.
+- If no verified list is provided, use your general knowledge but note that opening hours should be confirmed.
+- Provide exactly 3 options. Each MUST include: a clickable Google Maps link, a one-sentence description of what makes the place good, and the estimated walk time.
+- Format EXACTLY like this (the description sentence is mandatory, never omit it):
+  [Name of Place](https://maps.google.com/?q=Place+Name+City) — One sentence describing the vibe, specialty, or what to order. ~X min walk.
+- The description must tell the traveler WHY this place is worth visiting — mention the food, atmosphere, or specialty.
+- Pick well-known, highly-rated, real establishments. Prioritize places that are likely open at the current time of day.
+- NEVER say "I don't have specific recommendations" or "ask the hotel staff" — you are the concierge, give real answers.
+- Do NOT fabricate place names, but DO use your real knowledge of well-known establishments in these cities.`;
+    },
+  },
 };
 
 // ── Main fetch handler ─────────────────────────────────
@@ -709,9 +783,9 @@ export default {
       });
     }
 
-    // Chat endpoints: /api/chat/zurich or /api/chat/maritimes
+    // Chat endpoints: /api/chat/zurich, /api/chat/maritimes, /api/chat/wwii2026
     // Also support legacy /api/chat (defaults to zurich)
-    const chatMatch = url.pathname.match(/^\/api\/chat(?:\/(zurich|maritimes))?$/);
+    const chatMatch = url.pathname.match(/^\/api\/chat(?:\/(zurich|maritimes|wwii2026))?$/);
     if (chatMatch && request.method === 'POST') {
       const siteKey = chatMatch[1] || 'zurich';
       const site = SITES[siteKey];
@@ -1132,3 +1206,7 @@ const MARITIMES_ITINERARY = `{
     { "day": 4, "date": "Tue Jun 30", "time_local": "7:00 PM ADT", "timezone": "America/Halifax (Atlantic Time, UTC-3)", "iso": "2026-06-30T19:00:00-03:00", "venue": "Black Spoon Bistro", "location": "Sydney, NS (320 Esplanade) — pre-ferry, ~12 min from North Sydney terminal", "status": "Confirmed" }
   ]
 }`;
+
+// ── WWII2026 ITINERARY (London / Normandy / Nuremberg / Porto) ─────────
+const WWII_ITINERARY = `{"trip": {"title": "London → Normandy → Nuremberg → Porto · October 2026", "dates": "Oct 10–24, 2026 (14 nights)", "travelers": "2 adults", "theme": "Cultural WWII focus + Porto finish"}, "hotels": [{"city": "London", "nights": 5, "name": "London Marriott Hotel Park Lane", "daysRange": "Day 1–Day 6"}, {"city": "Normandy", "nights": 2, "name": "Villa Lara Hôtel (Bayeux)", "daysRange": "Day 6–Day 8"}, {"city": "Nuremberg", "nights": 2, "name": "Sheraton Carlton Hotel Nürnberg", "daysRange": "Day 8–Day 10"}, {"city": "Porto", "nights": 5, "name": "The Yeatman Hotel", "daysRange": "Day 10–Day 15"}], "days": [{"day": 1, "label": "Day 1 · Sat Oct 10 · Arrive London", "city": "London", "headline": "Evening walk through Mayfair after check-in, martini at The Dorchester", "stops": [{"time": "08:20", "type": "Flight", "text": "Newark (EWR) to London Heathrow (LHR) — nonstop"}, {"time": "22:00", "type": "Transport", "text": "Heathrow Express to Paddington, then taxi to Mayfair — 50 min total"}, {"time": "23:00", "type": "Hotel", "text": "Check in — London Marriott Hotel Park Lane", "hotel": "London Marriott Hotel Park Lane"}, {"time": "23:30", "type": "Dinner", "text": "Late supper at Scott's Mayfair (walk-in bar seats)", "restaurant": "Scott's Mayfair"}]}, {"day": 2, "label": "Day 2 · Sun Oct 11 · Westminster & Churchill War Rooms", "city": "London", "headline": "Stand in Churchill's Map Room where the war was directed", "stops": [{"time": "10:00", "type": "Activity", "text": "Churchill War Rooms"}, {"time": "12:30", "type": "Activity", "text": "Walk Westminster — Parliament Square, Churchill statue, Big Ben exterior, Westminster Abbey exterior"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at Veeraswamy", "restaurant": "Veeraswamy"}, {"time": "23:00", "type": "Hotel", "text": "Overnight — London Marriott Hotel Park Lane", "hotel": "London Marriott Hotel Park Lane"}]}, {"day": 3, "label": "Day 3 · Mon Oct 12 · Imperial War Museum", "city": "London", "headline": "Walk the Holocaust Exhibition and WWII galleries at IWM", "stops": [{"time": "10:00", "type": "Activity", "text": "Imperial War Museum London"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at Clio", "restaurant": "Clio"}, {"time": "23:00", "type": "Hotel", "text": "Overnight — London Marriott Hotel Park Lane", "hotel": "London Marriott Hotel Park Lane"}]}, {"day": 4, "label": "Day 4 · Tue Oct 13 · British Museum & West End", "city": "London", "headline": "Evening West End show — history on stage after a museum day", "stops": [{"time": "10:00", "type": "Activity", "text": "British Museum"}, {"time": "17:00", "type": "Dinner", "text": "Pre-theatre dinner at Kiln", "restaurant": "Kiln"}, {"time": "19:30", "type": "Activity", "text": "West End theatre — evening performance"}, {"time": "23:30", "type": "Hotel", "text": "Overnight — London Marriott Hotel Park Lane", "hotel": "London Marriott Hotel Park Lane"}]}, {"day": 5, "label": "Day 5 · Wed Oct 14 · Tower of London", "city": "London", "headline": "Stand where Anne Boleyn was beheaded, see the Crown Jewels", "stops": [{"time": "09:30", "type": "Activity", "text": "Tower of London"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at The River Restaurant by Gordon Ramsay", "restaurant": "The River Restaurant by Gordon Ramsay"}, {"time": "23:00", "type": "Hotel", "text": "Overnight — London Marriott Hotel Park Lane", "hotel": "London Marriott Hotel Park Lane"}]}, {"day": 6, "label": "Day 6 · Thu Oct 15 · Normandy American Cemetery", "city": "Normandy", "headline": "Stand at the cliff edge above Omaha Beach at dawn", "stops": [{"time": "08:00", "type": "Transport", "text": "Private driver pickup from hotel for full-day Normandy D-Day tour"}, {"time": "09:30", "type": "Activity", "text": "Normandy American Cemetery & Memorial"}, {"time": "11:30", "type": "Activity", "text": "Pointe du Hoc Ranger Monument"}, {"time": "14:00", "type": "Activity", "text": "Utah Beach Museum (Musée du Débarquement)"}, {"time": "17:30", "type": "Transport", "text": "Return to Bayeux hotel"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at Le Pommier", "restaurant": "Le Pommier"}, {"time": "22:00", "type": "Hotel", "text": "Overnight at Villa Lara Hôtel", "hotel": "Villa Lara Hôtel"}]}, {"day": 7, "label": "Day 7 · Fri Oct 16 · Juno Beach & Caen Memorial", "city": "Normandy", "headline": "Walk the Canadian beach at Juno, then the Caen peace museum", "stops": [{"time": "09:00", "type": "Transport", "text": "Drive to Juno Beach — 45 min via D514"}, {"time": "10:00", "type": "Activity", "text": "Juno Beach Centre"}, {"time": "13:00", "type": "Transport", "text": "Drive to Caen — 30 min via N13"}, {"time": "13:45", "type": "Activity", "text": "Mémorial de Caen (Caen Memorial Museum)"}, {"time": "17:00", "type": "Transport", "text": "Return to Bayeux — 35 min via N13"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at L'Angle Saint Laurent", "restaurant": "L'Angle Saint Laurent"}, {"time": "22:00", "type": "Hotel", "text": "Overnight at Villa Lara Hôtel", "hotel": "Villa Lara Hôtel"}]}, {"day": 8, "label": "Day 8 · Sat Oct 17 · Nuremberg Trials Memorial", "city": "Nuremberg", "headline": "Sit in Courtroom 600 where the architects of the Holocaust faced justice", "stops": [{"time": "06:30", "type": "Hotel", "text": "Check out from Villa Lara Hôtel", "hotel": "Villa Lara Hôtel"}, {"time": "06:45", "type": "Transport", "text": "Private driver to Paris CDG — 3h via A13/A86"}, {"time": "12:00", "type": "Flight", "text": "Fly Paris CDG → Nuremberg · nonstop"}, {"time": "14:00", "type": "Transport", "text": "Taxi NUE airport to hotel — 20 min"}, {"time": "14:30", "type": "Hotel", "text": "Check in at Sheraton Carlton Hotel Nürnberg", "hotel": "Sheraton Carlton Hotel Nürnberg"}, {"time": "15:30", "type": "Activity", "text": "Memorium Nürnberger Prozesse (Nuremberg Trials Memorial)"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at Essigbrätlein", "restaurant": "Essigbrätlein"}, {"time": "22:30", "type": "Hotel", "text": "Overnight at Sheraton Carlton Hotel Nürnberg", "hotel": "Sheraton Carlton Hotel Nürnberg"}]}, {"day": 9, "label": "Day 9 · Sun Oct 18 · Nuremberg old town", "city": "Nuremberg", "headline": "Walk the ramparts of Kaiserburg at golden hour", "stops": [{"time": "10:00", "type": "Activity", "text": "Nuremberg Castle (Kaiserburg) & Sinwell Tower"}, {"time": "14:00", "type": "Transport", "text": "Walk to Documentation Center — 25 min via Altstadt"}, {"time": "19:00", "type": "Dinner", "text": "Dinner at Waidwerk", "restaurant": "Waidwerk"}, {"time": "21:30", "type": "Hotel", "text": "Overnight at Sheraton Carlton Hotel Nürnberg", "hotel": "Sheraton Carlton Hotel Nürnberg"}]}, {"day": 10, "label": "Day 10 · Mon Oct 19 · Documentation Center & evening to Porto", "city": "Nuremberg", "headline": "Confront the Rally Grounds, then fly to Portugal's wine capital", "stops": [{"time": "09:00", "type": "Hotel", "text": "Check out from Sheraton Carlton Hotel Nürnberg · luggage hold", "hotel": "Sheraton Carlton Hotel Nürnberg"}, {"time": "09:30", "type": "Activity", "text": "Documentation Center Nazi Party Rally Grounds (Dokumentationszentrum Reichsparteitagsgelände)"}, {"time": "12:30", "type": "Transport", "text": "Taxi back to hotel for luggage pickup — 15 min"}, {"time": "13:00", "type": "Transport", "text": "Taxi to Nuremberg Airport (NUE) — 20 min"}, {"time": "15:55", "type": "Flight", "text": "Fly Nuremberg → Porto · nonstop"}, {"time": "18:20", "type": "Transport", "text": "Taxi OPO airport to hotel — 25 min via VCI"}, {"time": "18:50", "type": "Hotel", "text": "Check in at The Yeatman Hotel", "hotel": "The Yeatman Hotel"}, {"time": "20:00", "type": "Dinner", "text": "Dinner at Antiqvvm", "restaurant": "Antiqvvm"}, {"time": "23:00", "type": "Hotel", "text": "Overnight at The Yeatman Hotel", "hotel": "The Yeatman Hotel"}]}, {"day": 11, "label": "Day 11 · Tue Oct 20 · Porto arrival & riverside evening", "city": "Porto", "headline": "First port wine tasting overlooking the Douro at sunset", "stops": [{"time": "10:30", "type": "Note", "text": "Sleep in, leisurely hotel breakfast with Douro panorama"}, {"time": "14:00", "type": "Activity", "text": "Wine tasting at Quinta do Vallado terrace"}, {"time": "20:00", "type": "Dinner", "text": "Dinner at Antiqvvm", "restaurant": "Antiqvvm"}]}, {"day": 12, "label": "Day 12 · Wed Oct 21 · Ribeira & port lodges", "city": "Porto", "headline": "Private cellar tour at Graham's, then francesinha for lunch", "stops": [{"time": "10:00", "type": "Activity", "text": "Private port-lodge tour & tasting at Graham's"}, {"time": "12:30", "type": "Transport", "text": "Walk down to Ribeira · 15 min via Ponte Luís I lower deck"}, {"time": "13:00", "type": "Note", "text": "Explore Ribeira waterfront — azulejo-tiled buildings, São Francisco Church, Praça da Ribeira"}, {"time": "19:30", "type": "Dinner", "text": "Dinner at Pedro Lemos", "restaurant": "Pedro Lemos"}]}, {"day": 13, "label": "Day 13 · Thu Oct 22 · Douro Valley day trip", "city": "Porto", "headline": "Quinta do Crasto vineyard lunch overlooking terraced vines", "stops": [{"time": "08:30", "type": "Transport", "text": "Private driver picks up at hotel for Douro Valley day · full day with return ~6:00 PM"}, {"time": "10:30", "type": "Activity", "text": "Quinta do Crasto — vineyard tour, tasting & estate lunch"}, {"time": "15:00", "type": "Note", "text": "Scenic drive along N-222 (one of the world's most beautiful roads) · stop at Pinhão riverfront"}, {"time": "18:00", "type": "Transport", "text": "Return to Porto hotel"}, {"time": "20:00", "type": "Dinner", "text": "Dinner at Trasca", "restaurant": "Trasca"}]}, {"day": 14, "label": "Day 14 · Fri Oct 23 · Porto slow morning & evening flight prep", "city": "Porto", "headline": "Morning at Livraria Lello, then sunset port at Taylor's terrace", "stops": [{"time": "09:30", "type": "Activity", "text": "Livraria Lello bookshop & Clérigos Tower"}, {"time": "12:00", "type": "Note", "text": "Free afternoon — stroll Jardins do Palácio de Cristal, browse Rua Miguel Bombarda galleries, or relax at hotel wine spa"}, {"time": "17:30", "type": "Note", "text": "Sunset port tasting at Taylor's terrace (walk-in) — sweeping Douro panorama, quiet end to the trip"}, {"time": "20:00", "type": "Dinner", "text": "Dinner at O Paparico", "restaurant": "O Paparico"}, {"time": "22:00", "type": "Hotel", "text": "The Yeatman Hotel · overnight"}]}, {"day": 15, "label": "Day 15 · Sat Oct 24 · Depart Porto", "city": "Porto", "headline": "Morning at leisure, then fly Porto → Newark", "stops": [{"time": "09:00", "type": "Note", "text": "Sleep in, pack, final hotel breakfast with Douro view"}, {"time": "11:00", "type": "Hotel", "text": "Check out · The Yeatman Hotel", "hotel": "The Yeatman Hotel"}, {"time": "11:30", "type": "Transport", "text": "Private transfer to Porto airport (OPO) · 30 min"}, {"time": "14:05", "type": "Flight", "text": "Fly Porto to Newark (OPO → EWR) · nonstop"}]}]}
+`;
