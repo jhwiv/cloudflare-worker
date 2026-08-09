@@ -329,3 +329,30 @@ at. Check this list before assuming a Cloudflare deploy problem is new.
     secret put` / `wrangler pages secret put` only — enforced by explicit
     "do NOT add the secret value here" comments across essentially every
     repo checked on this account.
+
+## 6. Post-launch corrections found by actually using the site (aripshitadventure, 2026-08-09)
+
+Three more real gaps, found only after the user actually looked at the live
+build — add these to the pre-launch checklist for the next trip site instead
+of waiting for them to be reported again:
+
+1. **Times default to 12-hour, not 24-hour.** The source plan JSON's `time`/
+   `end_time`/`depart_time`/`arrive_time` fields are all 24-hour `"HH:MM"`
+   strings — render them through a `formatTime12()` helper everywhere a time
+   appears (item cards, condensed list, meals, transport reference, flight
+   times, weather sunrise/sunset), don't leave them as raw 24-hour text.
+2. **A consolidated "how do I get from A to B" view is not optional.**
+   zurich's Transit tab has a literal "Transport Quick Reference" table —
+   the first pass at this rebuild dropped it and only kept generic per-city
+   transit tips, even though every Transport/Flight item's own `text` field
+   already contains the real duration (e.g. "Drive to Juno Beach — 45 min
+   via D514"). Build a chronological list of every Transport/Flight item
+   across all days as its own section — don't assume it's covered by transit
+   info being present somewhere inside each day's card stack.
+3. **The itinerary map needs a route line, not just pins.** Isolated markers
+   don't convey the shape of the trip. Add a polyline connecting the
+   sequence of city centers in visiting order (derived from each day's own
+   `city` field) — but label it honestly as an overview/straight-line
+   connector, not a real driving route, since no routing API or key is used
+   or available in this environment. Don't imply turn-by-turn accuracy that
+   isn't there.
