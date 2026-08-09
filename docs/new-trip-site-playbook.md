@@ -25,6 +25,82 @@ guessing venue facts.
 
 ## 2. Build the static site — CONFIRMED (this pattern works)
 
+**Fork zurich-pwa's real `index.html` as the literal starting point.** The
+first `aripshitadventure` build was written as a new, much lighter design
+from scratch instead of adapting the proven file — the result was missing
+most of zurich's actual richness (single-scroll layout instead of tabs, no
+photo hero, thin weather card, no Street View, no font system) and had to be
+rebuilt. Don't repeat that: start from a copy of
+`/workspace/jhwiv/zurich-pwa/index.html` (or wherever it's cloned), then
+replace zurich's content with the new trip's, using the checklist below to
+confirm nothing structural got dropped along the way.
+
+### Confirmed zurich-pwa feature checklist (verified 2026-08-09 by reading the real file, not guessed)
+
+- **Nav — 12 chips across two markup-level `<nav>` rows**, `flex-wrap: wrap`
+  (no horizontal scroll): Condensed, Thursday, Friday, Saturday, Sunday /
+  Monday, Essentials, Transit, Street Views, History, Map, Air & Hotel.
+  Adapt the row-1 tabs to the new trip's actual day/city structure (a
+  4-city trip reads better as city tabs than day-of-week tabs — see the
+  `aripshitadventure` rebuild for that variant).
+- **Hero**: a real photo background via a **hotlinked remote URL**
+  (`background: url('https://images.unsplash.com/...') center/cover
+  no-repeat`), not a local asset or API-key-gated embed. A sandboxed session
+  can't browse to find/verify photo URLs — ask the user for real ones
+  up front rather than guessing; fall back to a solid navy/gold color-block
+  banner (zurich's own pattern for non-hero section transitions) for
+  anything not supplied.
+- **Meals & Reservations**: zurich's CONFIRMED/RECOMMENDED/WALK-IN badges
+  are **hand-authored per row from real bookings the traveler told the
+  builder about at the time** — not driven by any JSON field. Do not copy
+  that badge wording onto a different trip's data without checking first
+  (see the schema-check rule below) — it will almost always be fabricated.
+- **Street Views**: keyless embed —
+  `https://www.google.com/maps?layer=c&cbll=<lat>,<lng>&output=svembed`
+  in an iframe. No API key, confirmed by grepping the whole file for
+  `AIzaSy`/`maps.googleapis`/`key=` (zero matches). A second small link
+  (same URL without `output=svembed`) opens full Google Maps in a new tab.
+- **Weather card**: temp, hi/lo, condition, rain %, wind, sunrise/sunset,
+  plus a tap-to-expand modal with an hourly strip — all from Open-Meteo's
+  `current`+`daily`+`hourly` fields. Don't under-fetch (the first
+  `aripshitadventure` build only requested `current=temperature_2m,
+  weather_code` and had to be expanded).
+- **Fonts**: Playfair Display (headings), Crimson Pro (body), DM Mono
+  (labels/timestamps/badges/UI chrome) via one Google Fonts `<link>`.
+- **Directions**: only ever a Google Maps text-search link
+  (`maps.google.com/?q=...`) in the real zurich-pwa file — it does **not**
+  have Apple Maps or Waze buttons despite looking like the kind of site
+  that would. If a user asks for "GPS buttons like zurich," check before
+  building — say so if it isn't actually there, then build it anyway if
+  still wanted (it's a reasonable addition either way: Apple Maps
+  `maps.apple.com/?q=...` and Waze `waze.com/ul?q=...&navigate=yes` are
+  both standard, keyless universal-link formats, no API key for either).
+- **Essentials / Transit / History tabs**: a mix of real quick-reference
+  data (hotel/flight cards — pull from the actual trip JSON) and
+  AI-authored general destination knowledge (transit tips, historical
+  context) — label the latter as general reference, not verified fact, per
+  the account's existing "don't present unverified as fact" convention.
+- Lower-priority zurich features not always worth the scope: an "Alter Day"
+  AI itinerary-regenerator modal (needs a new worker endpoint), native app
+  deep-links (`marriott://`, `flysas://` — scheme correctness depends on
+  the actual carriers/hotels in the new trip), floating timezone pill,
+  browser-native TTS pronunciation tables. Confirm scope with the user
+  before including these — don't assume v1 needs the full set.
+
+### Check the real data schema before building any status/badge UI
+
+Before reusing a UI pattern that implies structured data (a CONFIRMED badge,
+a status color, a count), grep the actual trip JSON for the field it would
+need. `aripshitadventure`'s data had no reservation-confirmation field at
+all (`restaurant.verify_status` was identically `"verify_before_booking"`
+across all 14 restaurants — zero variance) — building zurich's badge wording
+on top of it would have fabricated a status that isn't real. What *was* real
+and usable: `restaurant.reservation.platform` (resy/opentable/phone/walkin —
+the booking channel, not a confirmation state) and `restaurant.contact`
+(fully populated). Use what the data actually says, worded honestly, rather
+than reusing a sibling site's wording that implies something the data
+doesn't back up.
+
 No build step, no framework — plain HTML/CSS/JS, same shape as
 `zurich-pwa`/`aripshitadventure`:
 - Render day-by-day content from the trip JSON at runtime (don't hand-write
@@ -152,3 +228,104 @@ Creates the Pages project and deploys in one command from a local clone.
 Trade-off: doesn't auto-redeploy on future pushes — rerun the command, or
 add a GitHub Actions workflow using `cloudflare/pages-action` (mirrors how
 this repo's own Worker auto-deploys via `cloudflare/wrangler-action@v3`).
+
+## 5. Cloudflare Pages/Workers deployment lessons — account-wide history
+
+Mined from a full pass across ~26 repos on this account (2026-08-09) that
+had never been consolidated anywhere — each one had already been paid for
+once, in a real incident or debugging session, and was sitting undiscovered
+in a README/VERSION.md/wrangler.toml comment in a repo nobody was looking
+at. Check this list before assuming a Cloudflare deploy problem is new.
+
+1. **Pages secret rotation doesn't auto-redeploy.** `wrangler pages secret
+   put` doesn't propagate to the running deployment — trigger a fresh
+   deploy afterward (an empty commit + push works), or the old value keeps
+   serving. *(vigil-family-records)*
+2. **Workers and Pages have entirely separate secret stores.** A companion
+   Worker needs its own copy of a secret even when the identical value is
+   already set on the Pages project it calls. *(vigil-family-records)*
+3. **Pages Functions (V8 isolates) can't run child processes or native
+   modules**, and have a hard ~30s CPU budget plus Cloudflare's own ~100s
+   edge timeout per request. CLI-based tooling (e.g. `pdftoppm`/`tesseract`)
+   silently fails — route heavy work through a Queue + dedicated Worker, or
+   use a hosted API instead of a CLI dependency. *(vigil-family-records)*
+4. **Pages' `wrangler.toml` doesn't support `[triggers]` (cron) at all.**
+   Scheduled jobs need a separate companion Worker hitting Pages HTTP
+   endpoints with a shared bearer secret. *(vigil-family-records)*
+5. **The account default silently changed from classic Pages to "Workers
+   with static assets."** New Git-connected projects can create as Workers
+   (`wrangler deploy`, `wrangler.jsonc` with bindings declared directly) —
+   confirm which mode a new project actually landed in with `--dry-run`
+   rather than assuming. *(multihomes-command)*
+6. **A custom domain attached via `wrangler.jsonc`/`routes` is a standing
+   account-level resource** — removing the `routes` entry and redeploying
+   does NOT clean it up; it needs an explicit `DELETE
+   /accounts/{id}/workers/domains/{id}` API call. *(daily-dashboard)*
+7. **`workers_dev` toggling interacts destructively with Cloudflare
+   Access.** Adding a custom-domain `routes` entry can silently flip
+   `workers_dev` to `false` (killing the working `*.workers.dev` URL);
+   flipping it back on can silently drop a previously configured Access
+   policy on that hostname — leaving it live and unauthenticated with a
+   plain `200`. `wrangler.jsonc`'s `workers_dev` field and the account's
+   real subdomain-enabled flag can also desync — check
+   `GET/POST /accounts/{id}/workers/scripts/{name}/subdomain` directly,
+   don't trust deploy output. **Never call an Access-gated URL "safe" from
+   a `200` status alone — check the response body.** This was a real
+   incident with genuinely sensitive data briefly exposed. *(daily-dashboard)*
+8. **Cloudflare Access gates static assets too**, which breaks iOS "Add to
+   Home Screen" icon fetches (no authenticated session carried by iOS's
+   icon-loading mechanism). Also: **Workers Static Assets serves matching
+   requests directly at the edge by default, bypassing the Worker's own
+   `fetch()` handler** — `"run_worker_first": true` is required if the
+   Worker needs to guard those requests. Also: a `manifest.json`'s
+   `start_url` must be absolute if the manifest is served from a different
+   hostname than the app. *(daily-dashboard)*
+9. **Missing/misconfigured `_headers` cache rules let Cloudflare's *edge*
+   cache — not just the browser — serve stale content to every visitor.**
+   `immutable`/1-year caching is only safe for content-hashed build output;
+   statically-named files (favicon, icons) need short `max-age` +
+   `must-revalidate`, and a policy fix can't retroactively bust what's
+   already cached under an old `immutable` promise — rename the file to
+   force a new URL. A three-layer pattern (SW fetch with `cache:'no-store'`
+   on navigations + `_headers` no-cache on `/`/`index.html`/`sw.js`/
+   manifest + a `controllerchange` listener that force-reloads once) has
+   already been independently rediscovered and copied verbatim across two
+   sibling repos. *(family-transition-tracker, daily-dashboard)*
+10. **Workers Cron Triggers are capped at 5 per Cloudflare account.** A 6th
+    `[triggers].crons` block fails at deploy time — confirm against the
+    account's live schedules, work around with an on-request
+    `ctx.waitUntil` background refresh if the cap is hit. *(daily-dashboard)*
+11. **Some third-party APIs platform-block Cloudflare's Workers outbound IP
+    range specifically**, even when identical requests succeed from
+    elsewhere (e.g. Google News RSS returning 503 only from a Worker).
+    `wrangler dev` runs on a different network than the real edge and
+    cannot reproduce this — only a live deployed Worker can confirm it.
+    *(daily-dashboard, ne-racing)*
+12. **`caches.default` is partitioned per Cloudflare colo** — a cold colo's
+    first visitor pays full uncached upstream cost even when other colos
+    are warm. A scheduled Cron Trigger that proactively warms the cache
+    globally ahead of real traffic fixes this. *(ne-racing)*
+13. **A Worker's isolate can be killed the instant the response stream
+    finishes**, silently truncating an in-flight async `cache.put()`. Wrap
+    cache writes in `ctx.waitUntil()` so the isolate stays alive until the
+    write actually completes. *(ne-racing)*
+14. **Split deploy pipelines are a recurring trap**: Pages/frontend
+    auto-deploys from git via CI, but a companion Worker often needs a
+    separate, manual `wrangler deploy` with no CI coverage — a stale Worker
+    missing new endpoints is a repeat failure mode. *(ne-racing)*
+15. **GitHub Pages cannot execute Cloudflare Pages Functions at all** — any
+    fetch to a Functions-only path 405s there. Never point both GitHub
+    Pages' `CNAME` and a Cloudflare Pages custom domain at the same apex
+    simultaneously — they fight over it. *(maritimes-grandloop-v2)*
+16. **"Deployed" ≠ "confirmed live."** A `modified_on` timestamp only
+    proves Cloudflare *received* a push, not that the build succeeded or
+    new assets are serving. Cloudflare Access gating a production domain
+    returns 403 to an unauthenticated agent-sandbox request — expected
+    behavior, not evidence of a failed deploy. The only real confirmation
+    is a human checking the live site — this mirrors the identical rule
+    already in `trip-optimizer`'s own CLAUDE.md. *(multihomes-command,
+    daily-dashboard)*
+17. **Never put secrets in `wrangler.toml`/`wrangler.jsonc`.** `wrangler
+    secret put` / `wrangler pages secret put` only — enforced by explicit
+    "do NOT add the secret value here" comments across essentially every
+    repo checked on this account.
