@@ -356,3 +356,72 @@ of waiting for them to be reported again:
    connector, not a real driving route, since no routing API or key is used
    or available in this environment. Don't imply turn-by-turn accuracy that
    isn't there.
+
+## 7. Itinerary-data QA checklist — run this BEFORE building the site, not after being asked
+
+This is the actual methodology that found real, confirmed defects in the
+`aripshitadventure` trip data (a restaurant booked on its own closed day, an
+entire missing international transition, four unverified flight numbers
+presented as fact) — found reactively, one at a time, only because the user
+kept pushing after an initial pass said "looks mostly clean." Run all of
+these upfront, unprompted, before telling anyone an itinerary is sound.
+
+1. **Date/weekday check.** Recompute every day's actual weekday from the
+   trip's start date and compare against what the label claims. Cheap,
+   scriptable, zero excuse to skip.
+2. **Within-day time ordering.** Every item's `time` must be ≥ the previous
+   item's `end_time` (or `time` if no `end_time`). Flag any item that starts
+   before the previous one plausibly ends.
+3. **Flight time math against real timezones**, not just "does duration
+   match depart/arrive as printed." Convert both to UTC using the ACTUAL
+   timezone offset for each airport's country/date (DST matters — check
+   whether the trip's dates fall before or after the relevant DST changes)
+   and confirm the elapsed time matches the stated duration. Internally
+   consistent numbers are necessary but NOT sufficient — see point 6.
+4. **Night-count reconciliation using hotel check-in/check-out events, not
+   `day.city`.** `day.city` reflects where a day's ACTIVITIES happen, which
+   on a transit day is not the same city the NIGHT is spent in (the transit
+   day's night is wherever the traveler checks into a hotel that evening).
+   Build the city→hotel mapping from actual Hotel-type items with
+   check-in/check-out text, then count nights per city from that — cross
+   check against the trip's own claimed `cities[].nights` and the meta
+   summary line. Do this by tracing hotel NAME → city (via a coordinates
+   file or similar), not by re-using the day's own city label, or the
+   count will silently misattribute transit-day nights (confirmed by
+   getting this wrong twice while checking this exact data, before
+   landing on the correct hotel-name-based method).
+5. **Inter-city transition continuity.** For every day where `city`
+   changes from the previous day, confirm there is an actual Flight or
+   Transport item (or sequence of items) that plausibly gets the traveler
+   from the old city to the new one. A day that just starts already in the
+   new city, with full-day activities and no transition items anywhere,
+   is a real missing-leg bug — cross-check against any summary metadata
+   (e.g. `cities[].transport_in`) that claims a specific flight/transfer,
+   since that claim not appearing anywhere in the actual `days[]` items is
+   itself the tell. This is the single most consequential check — it
+   surfaces "this itinerary is missing a whole travel day," not just a
+   cosmetic error.
+6. **Scan every venue object for the plan's own internal QC flags** —
+   fields starting with `_` (e.g. `_weekdayMismatch`, `_isReturnVisit`,
+   `_missingBackup`, `_modelEstimatedFlightNumber`) and any `closure_note`/
+   `verify_status` field. These are the plan's own admissions of
+   uncertainty or unresolved conflicts — a `closure_note` that says "won't
+   work, moved to Day N" on an item that's STILL scheduled where it said
+   it wouldn't work is a confirmed, present bug, not a hypothetical one.
+   **`_modelEstimatedFlightNumber: true` on a flight means the number
+   AND time were never checked against a real schedule — treat this as a
+   headline risk, not a footnote.** Under-weighting exactly this in a
+   first-pass summary (listing it as "worth knowing, not necessarily an
+   error" instead of leading with it) is a real mistake already made once
+   on this account — don't repeat it.
+7. **Once a defect is found, check whether the same UI element renders
+   in more than one place** before considering the fix complete — a
+   warning/badge/flag added to only one of several render paths (e.g. an
+   "unverified flight" warning that only showed in one tab out of four
+   places flights render) is an incomplete fix, not a complete one. Grep
+   for every call site of the thing being fixed, not just the one visible
+   in whatever screenshot prompted the fix.
+
+See `docs/cloudflare-wiki.md` for the Cloudflare-platform-specific
+counterpart to this file, including an explicit log of wrong guesses
+already made and corrected — read both before starting a new build.
