@@ -63,6 +63,45 @@ giving any Cloudflare instruction or writing any Cloudflare-touching code.
    grep for every call site before declaring a fix complete — "I fixed it
    in the place I was looking at" is not the same claim as "I fixed it
    everywhere it appears."**
+6. **WRONG GUESS: told the user zurich-weekend.com had no photo hero and
+   no photo city banners** — a flatly false, confidently stated claim,
+   caught only when the user sent real phone screenshots of the live site
+   showing both. Root cause: the claim was based on reading
+   `zurich-weekend-archive/original-source.html`, a ~4.5-month-STALE
+   archived snapshot (dated 2026-03-30), instead of the actively-maintained
+   `jhwiv/zurich-pwa` repo (real last commit 2026-04-12) — and a THIRD,
+   separate `jhwiv/zurich-weekend` repo existed and was never even opened.
+   **The lesson: when multiple similarly-named sibling repos exist for
+   "the same" reference site (an `-archive` suffix, a bare name, a `-pwa`
+   suffix), check `git log -1` commit dates across ALL candidates before
+   trusting any one of them as ground truth — grepping the first repo
+   found by name is not the same as finding the authoritative one.** A
+   generic "-archive" suffix is a strong hint but not proof either way;
+   verify by date, not by name pattern.
+7. **Chat-pasted images are not the same delivery mechanism as file
+   attachments/uploads, and only the latter produces bytes this session
+   can actually read.** A user pasting/drag-dropping an image directly
+   into the chat compose box renders visually (the model can see and
+   describe it) but never lands on disk anywhere in the sandbox — confirmed
+   by searching the entire filesystem after each of several repeated
+   attempts and finding zero new files, across three separate paste
+   attempts totaling 20+ images. A genuine file **attachment/upload** (the
+   button/flow a client uses to send a real file, distinct from pasting)
+   DOES land in `/root/.claude/uploads/<session-id>/` with a readable path.
+   **The lesson: if an image needs to be saved into a repo, the user must
+   use their client's explicit attach/upload mechanism, not paste — and if
+   repeated attempts via one method produce zero files on disk (verify with
+   `find /root/.claude/uploads -newer <last-known-file>`), stop asking for
+   a retry of the same method and say so plainly.** When neither pasting
+   nor a direct network fetch works (this account's egress also blocks
+   Unsplash/Pexels entirely, not just their image CDNs — confirmed via
+   `curl`, `WebFetch`, and against multiple exact download URLs), the
+   reliable fallback that DOES work: have the user upload the file(s)
+   directly to the target GitHub repo via the GitHub web UI (repo → target
+   folder → **Add file → Upload files** → drag or "choose your files" →
+   commit), then `git fetch`/`rebase` to pull the real bytes. This sidesteps
+   both the chat-paste gap and the network-egress block entirely, since it
+   never asks the session to fetch or receive the image directly.
 
 ## Confirmed: Cloudflare Pages deploy flow (2026-08-09, screen-by-screen)
 
@@ -167,6 +206,17 @@ connecting them.
     identical rule already in trip-optimizer's CLAUDE.md)*
 17. **Never put secrets in `wrangler.toml`/`wrangler.jsonc`.** `wrangler
     secret put` / `wrangler pages secret put` only.
+18. **A cache-busting step that only rewrites HTML `?v=` query strings
+    misses the service worker's own cache**, if the site has one — the SW
+    keeps serving stale JS/CSS out of its cache regardless of what the HTML
+    now points at. `barrier-island-digital` hit this as a real incident
+    (broken mobile CSS stuck live for days) before fixing it with an
+    automated `scripts/rehash-assets.sh` + GitHub Action that hashes
+    CSS/JS, rewrites `index.html`, **and** re-stamps the service worker's
+    `CACHE_VERSION` constant in the same pass — copy that pattern rather
+    than re-deriving it if a new trip site ships with a service worker.
+    *(barrier-island-digital, santafe-itinerary independently hit the same
+    shape — a stale-cached broken OpenTable link stuck live)*
 
 ## Known real integrations already working on this account
 

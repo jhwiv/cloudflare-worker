@@ -13,6 +13,84 @@ Each numbered step is marked with how solid the information is:
   to a unified "Create a Worker" screen with a "Looking to deploy Pages? Get
   started" link → "Import an existing Git repository").
 
+## Master checklist — run this in order, every build
+
+The sections below are reference material; this is the actual procedure.
+Everything in it was written because skipping it once already cost real
+time or a real, avoidable user correction on this account. Don't treat any
+step as optional because "this trip seems simple."
+
+**Before writing any code:**
+1. Get the real trip data from a verified source (§1) — never hand-type or
+   guess venue facts.
+2. If referencing a sibling "reference" site by name, check `git log -1`
+   across every similarly-named repo (an `-archive` suffix, a bare name, a
+   `-pwa` suffix) before treating any one of them as ground truth — go by
+   commit date, not by which one you found first (`cloudflare-wiki.md`
+   corrected-mistake #6).
+3. Ask the user up front for real photo files/URLs — a sandboxed session
+   usually cannot fetch or hotlink from any image host (§9's hero/banner
+   note). Don't guess or placeholder-and-forget; track what's still needed.
+4. **Don't infer a traveler's personal facts (home city, home timezone,
+   home base) from trip-adjacent data (a departure airport, a stated
+   preference) — ask, or leave it explicitly unconfirmed.** Concretely
+   caused a wrong "Eastern (home)" timezone label on `aripshitadventure`
+   (2026-08-10), guessed from the EWR departure airport, when the
+   traveler's real home was Dallas/Central — a fact the trip data never
+   stated and had no way to imply correctly.
+5. Decide the nav architecture explicitly (continuous-scroll + scroll-spy,
+   confirmed as the real zurich-pwa pattern — see §2's correction) rather
+   than assuming either that or a click-to-switch pattern from memory.
+6. Check `travel-app-components` and `trip-restaurants` for any requested
+   feature before building it from scratch (§10) — both are real,
+   actively-used libraries, not aspirational.
+
+**While building:**
+7. Fork zurich-pwa's real `index.html` as the literal starting point (§2) —
+   re-read the actual current source, don't work from a memory of what a
+   past summary of it said.
+8. Run through the confirmed feature checklist (§2) and check the real data
+   schema before building any status/badge UI that implies structured data.
+9. Run the 7-point itinerary-data QA checklist (§7) BEFORE building the
+   site, not reactively after a user reports a problem.
+10. Verify every supplied photo's actual license before wiring it in (§8) —
+    a user handing over a file is not proof it's usable.
+11. Include a print stylesheet and a `localStorage`-backed packing list by
+    default — both are confirmed present in 2+ independent prior builds,
+    treat as standard rather than optional (§10). If building an AI
+    concierge chat, include a user-facing hallucination disclaimer — a
+    confirmed, still-open gap on every prior build that has one (§10).
+
+**Before calling it done:**
+12. Serve locally (`python3 -m http.server`) and drive it with Playwright,
+    mocking every external API call — screenshot **every** tab, not just
+    the ones that changed, at both desktop and a real mobile width (375px).
+13. If the build included any navigation-architecture change, grep the
+    stylesheet and JS for comments referencing tab-switch/scroll-reset
+    behavior and re-verify each hit live — that behavior changing is a
+    landmine for anything that assumed it (§9).
+14. Check the print stylesheet — a JS-toggled collapsed/expanded UI element
+    needs an explicit `display: block !important` override in `@media
+    print`, or its content silently vanishes from anything printed/exported
+    (confirmed live on `aripshitadventure`'s weather-chip redesign,
+    2026-08-10).
+15. Confirm zero JS console errors (`page.on('pageerror')`), not just that
+    the page rendered something.
+16. If the site has a service worker, confirm the cache-busting step also
+    re-stamps its `CACHE_VERSION` (or equivalent) constant, not just HTML
+    `?v=` strings (`cloudflare-wiki.md` lesson #18) — a stale service
+    worker keeps serving broken JS/CSS regardless of what the HTML now
+    points at.
+17. Add the site to the shared worker if it needs chat (§3), via a **PR**,
+    never a direct push to `main` (that repo auto-deploys to shared prod).
+18. Deploy to Cloudflare Pages (§4) and confirm the live URL actually shows
+    the new build — a push timestamp is not confirmation (see
+    `cloudflare-wiki.md`'s "Deployed ≠ confirmed live").
+19. **If this build taught a new lesson, add it back to this file (or
+    `cloudflare-wiki.md`) before ending the session.** The entire value of
+    this document is that lessons compound instead of repeating — every
+    section below exists because a prior build hit it and wrote it down.
+
 ## 1. Get the source itinerary data — CONFIRMED
 
 The most reliable source is the structured JSON embedded in a trip-planning
@@ -43,13 +121,41 @@ confirm nothing structural got dropped along the way.
   Adapt the row-1 tabs to the new trip's actual day/city structure (a
   4-city trip reads better as city tabs than day-of-week tabs — see the
   `aripshitadventure` rebuild for that variant).
-- **Hero**: a real photo background via a **hotlinked remote URL**
-  (`background: url('https://images.unsplash.com/...') center/cover
-  no-repeat`), not a local asset or API-key-gated embed. A sandboxed session
-  can't browse to find/verify photo URLs — ask the user for real ones
-  up front rather than guessing; fall back to a solid navy/gold color-block
-  banner (zurich's own pattern for non-hero section transitions) for
-  anything not supplied.
+  **CORRECTION (2026-08-10, confirmed by reading zurich-pwa's live source
+  directly, not this doc's own 2026-08-09 first draft):** the nav is
+  **continuous-scroll with a scroll-spy active chip, NOT click-to-switch
+  hide/show tabs.** All `.tab-section`s render inline at all times; the
+  active nav chip is whichever section's top has scrolled past the sticky
+  nav (iterate sections, take the last whose `getBoundingClientRect().top
+  <= navHeaderHeight`); clicking a chip `scrollIntoView({behavior:'smooth',
+  block:'start'})`s to it rather than toggling `display`. Getting this
+  wrong (building click-switch instead) is exactly what triggered a sharp,
+  justified user correction on this account once already — don't repeat
+  it, and don't trust an older summary of this checklist over rereading
+  the real file if the two ever seem to disagree.
+- **Hero + city banners — real PHOTOS, not illustrated/generated scenes**,
+  and NOT one single static image: a full-bleed `.hero-photo` background
+  layer behind a top-light/bottom-dark gradient overlay for text legibility,
+  PLUS a real `.location-banner`/`.location-banner-img` photo banner
+  (image + darkening `filter:brightness()` + flag/city/nights label) at
+  **every city transition**, full-bleed via a negative-margin trick
+  (`margin:0 -20px; width:calc(100% + 40px)`) to escape the page's own
+  container padding. Photos are hotlinked remote URLs in the real
+  zurich-pwa/maritimes-grandloop-v2 source (`background:url('https://
+  images.unsplash.com/...')`) — but a sandboxed build session usually
+  *cannot* fetch or hotlink from any image host (confirmed repeatedly:
+  images.unsplash.com, unsplash.com root, and pexels.com all return a
+  network-egress-proxy 403 to `curl` and `WebFetch` alike), so the working
+  pattern here is local files under `images/` sourced from the user (see
+  §7/§8) rather than a live hotlink. **Do not tell a user these don't
+  exist without first reading the actual current source of the reference
+  site** — see the "stale archive" corrected mistake in
+  `docs/cloudflare-wiki.md`.
+- **Hero photo carousel (rotates a different photo per page load)** is a
+  genuinely NEW feature, confirmed NOT present in either zurich-pwa or
+  maritimes-grandloop-v2 (grepped both for "carousel"/"rotat"/"heroPhotos"
+  /"setInterval.*hero" — zero matches in either). Build it as new work, and
+  say so plainly rather than presenting it as "matching the reference."
 - **Meals & Reservations**: zurich's CONFIRMED/RECOMMENDED/WALK-IN badges
   are **hand-authored per row from real bookings the traveler told the
   builder about at the time** — not driven by any JSON field. Do not copy
@@ -130,10 +236,25 @@ No build step, no framework — plain HTML/CSS/JS, same shape as
     z-index: 1; isolation: isolate;`) — otherwise Leaflet's internal panes
     (they set their own high z-index values) can visually bleed through
     other fixed-position UI on top of the map.
-- **JS pitfall already hit once:** `navigator.geolocation.getCurrentPosition`'s
-  own `timeout` option is not a hard guarantee — some browsers only start
-  that clock once the permission prompt is answered, so an unanswered
-  prompt can hang forever. Wrap it in your own `setTimeout` fallback too.
+  - `content-visibility: auto` on a long scrolling section caused a real,
+    confirmed scroll-height miscalculation on touch devices ("hits a wall
+    then snaps") — removed entirely on `santafe-itinerary` rather than
+    patched. Avoid it on any section a user scrolls through by touch until
+    there's a specific, verified reason to use it.
+- **JS pitfalls already hit once:**
+  - `navigator.geolocation.getCurrentPosition`'s own `timeout` option is not
+    a hard guarantee — some browsers only start that clock once the
+    permission prompt is answered, so an unanswered prompt can hang
+    forever. Wrap it in your own `setTimeout` fallback too.
+  - A scroll-spy nav can be re-triggered mid-bounce by iOS's overscroll
+    momentum, fighting the just-scrolled-to tab (`short-aruba`, "the
+    vibration bug"). Guard the re-center/re-highlight logic with a check
+    against the currently-active tab before acting, not just against the
+    scroll position.
+  - A regex-based cache-bust step that rewrites asset URLs can corrupt
+    single-quoted import paths if the pattern isn't scoped tightly enough
+    (`santafe-itinerary`, required a hotfix) — test the rewrite against a
+    real file with both quote styles before trusting it in CI.
 
 ### Verify the site locally before pushing (CONFIRMED — do this, it finds real bugs)
 
@@ -421,6 +542,224 @@ these upfront, unprompted, before telling anyone an itinerary is sound.
    places flights render) is an incomplete fix, not a complete one. Grep
    for every call site of the thing being fixed, not just the one visible
    in whatever screenshot prompted the fix.
+
+## 8. Photo sourcing — verify the license, not just the download
+
+A user handing over "free" photos (their own downloads, a shared manifest of
+Unsplash/Pexels URLs, anything not obviously their own camera roll) is not
+proof they're actually license-clear. Confirmed on `aripshitadventure`
+(2026-08-10): 3 of 4 initially-supplied "usable" photos turned out to be
+unlicensed Adobe Stock / Getty-iStockphoto **preview/comp downloads** —
+watermarked in one case, un-watermarked but still unpurchased in another.
+
+**Check before wiring any supplied photo into a live site:**
+```
+strings images/photo.jpg | grep -iE "adobe|copyright|getty|shutterstock|istock|alamy|dreamstime|123rf|depositphotos|stock\.|licensor|creator"
+```
+- Adobe Stock preview downloads carry `adobe:docid:stock:<uuid>` in embedded
+  XMP metadata, whether or not a visible watermark is also present.
+- Getty/iStockphoto previews carry `photoshop:Credit="Getty Images/
+  iStockphoto"` plus an **unpurchased** `xmpRights:LicensorURL` pointing at
+  a license-purchase page, and often a `plus:DataMining` "prohibited"
+  rights flag.
+- **A visible tiled watermark is sufficient evidence of an unlicensed
+  preview, but its absence is not evidence of a clean license** — check the
+  metadata regardless of whether anything looks watermarked on screen.
+- No stock-service metadata found is also not proof of a clear license,
+  just an absence of the specific red flag this check looks for — say so
+  explicitly rather than calling a metadata-clean file "confirmed licensed."
+
+If a supplied photo fails this check, it's fine to ship it anyway if the
+user explicitly says so (their call, their content) — but say so plainly,
+record which files are still pending a real replacement (a short
+`images/README.md` per-file credit/status list works well), and don't
+silently treat "the user gave me a file" as "the file is licensed."
+
+Real, verifiably free-license photos (Unsplash License / Pexels License,
+both explicitly free for commercial use with no attribution required) are
+the target — a photo manifest listing `sourceUrl`/`downloadUrl`/
+`photographer`/`license` per image, built from a real search of those two
+sites, is a good format for a user to hand off if they can't upload files
+directly (see §7's image-attachment note in `cloudflare-wiki.md` for why
+the session usually can't fetch the `downloadUrl` itself and needs the
+files uploaded some other way).
+
+## 9. A continuous-scroll rebuild invalidates every CSS assumption tied to click-tab behavior — audit, don't assume
+
+Confirmed twice in one session (`aripshitadventure`, 2026-08-10) after
+rebuilding from zurich-pwa's real click-to-switch-tabs pattern (each nav
+chip click hides all other `.tab-section`s and resets scroll to top) into a
+continuous-scroll pattern (all sections always rendered, a sticky nav
+scroll-spies the active chip, clicking smooth-scrolls instead of toggling
+`display`). Two separate pieces of CSS had been written with an *explicit,
+commented* dependency on "every tab switch resets scroll to top," and both
+silently broke the moment that stopped being true — not because the
+architecture change itself was wrong, but because nothing re-audited CSS
+comments elsewhere in the file that had baked in the old assumption:
+
+1. A mobile-only rule padded a day-quick-jump nav row by 84px/172px "to
+   clear the fixed FAB stack, since this row is always the first thing
+   visible on a fresh tab load." Under continuous scroll that row can land
+   anywhere on the page, and the leftover padding crushed 5 day-pills into
+   a single ~79px column, stacking them one per row instead of wrapping.
+2. A timezone pill was pinned top-right specifically because bottom-right
+   "collided with whatever content the scroll-to-top() lands on for every
+   tab switch." With no more scroll-to-top event, top-right instead
+   visibly overlapped the new sticky nav bar — the exact kind of collision
+   the original placement was chosen to avoid, just relocated.
+
+**The pattern to watch for:** any CSS/JS comment that justifies a layout
+choice by referencing tab-switch/scroll-reset behavior is a landmine the
+moment that behavior changes — `grep -i "tab switch\|scroll.to.top\|resets scroll"`
+across the stylesheet and app JS before/after a navigation-architecture
+change, and re-verify each hit live (not just re-read the comment) rather
+than assuming a rebuild that fixed the thing it was aimed at didn't also
+quietly break something adjacent that depended on the old behavior.
+
+## 10. Feature inventory — check these before building anything from scratch
+
+Mined from a full pass across every remaining trip-site repo on this account
+(2026-08-10) that hadn't yet been swept for this playbook. Three background
+research passes covering ~13 repos, cross-checked against each other and
+against what §1–§9 already documented, specifically to avoid re-listing
+anything already covered.
+
+### Check these two repos FIRST, before writing new code for what they already do
+
+- **`jhwiv/travel-app-components`** — a real, actively-consumed copy-paste
+  component library (not aspirational): `welcome-screen`, `packing-list-v2`,
+  and `concierge-chat`, each with its own README/source/notes/snippets,
+  extracted from zurich-weekend, maritimes-grandloop-v2, and
+  santafe-itinerary. Confirmed actually adopted — `aripshitadventure`'s own
+  source has explicit "adapted from travel-app-components/..." attribution
+  comments for the first two. It also tracks a "parking lot" of ~12
+  identified-but-not-yet-extracted patterns (print views, a time pill,
+  per-activity Wear/Expect/Arrive rows, a feedback-mail flow) — check that
+  list before building any of those from zero.
+- **`jhwiv/trip-restaurants`** — a full, mature restaurant-reservation
+  module, not a toy: tiered pricing ($$/$$$/$$$$), per-night backup-pick
+  auto-suggestion, an OpenTable/Resy deep-link builder that prefills
+  date/covers, a "mark as booked" flow, and a reservation-timeline widget
+  ("3 of 7 nights picked · 1 booked"). Build-time Nominatim geocoding +
+  OSRM walk-time routing (both free, no API key, resolved at build time not
+  runtime). Live and in production use via `santafe-itinerary`/
+  `santafe-demo` (santafejune.com) — bundled locally rather than
+  CDN-loaded, deliberately, to avoid a third-party outage taking down a
+  live trip site. Its own `scripts/verify.js` treats OpenTable/Resy WAF
+  403s on automated checks as a soft-block warning, not a hard CI failure —
+  copy that distinction if reusing the verify script, a hard-fail here
+  produces constant false alarms.
+
+### Confirmed independently in 2+ unrelated repos (strong signal — treat as standard, not optional)
+
+- **A print stylesheet** (`@media print`, hiding nav/FABs/chat, forcing
+  content to flow for paper) — present in `caribbean-escape`, `short-aruba`,
+  `barrier-island-digital`/`naples` (the latter also sets
+  `print-color-adjust: exact` so background colors survive printing), and
+  flagged as a high-priority not-yet-extracted item in
+  `travel-app-components`'s own parking lot. Build one by default, not as
+  an afterthought — see §"Verify the site locally" for the print-specific
+  gotcha this session already hit (a JS-toggled collapsed element needs an
+  explicit `display: block !important` override or its content vanishes
+  from print entirely).
+- **A packing list with `localStorage`-persisted checkboxes** — present in
+  `travel-app-components/packing-list-v2` (sourced from santafe-itinerary),
+  `short-aruba`, and independently in `santafe-itinerary` itself. Treat as
+  a standard tab, not an optional add-on.
+- **A group priority poll / ranked-choice voting widget** (per-activity
+  Yes/Maybe/Skip, drag-to-rank priorities, a live tallied results panel) —
+  present in both `budvienna` and `barrier-island-digital`. Real caveat,
+  confirmed in `budvienna`: results are `localStorage`-only per visitor's
+  own browser, with **no backend sync across different travelers' devices**
+  — tell the user this explicitly if they want a real shared group poll,
+  don't let them assume it aggregates automatically.
+
+### Notable single-repo patterns worth knowing exist
+
+- **Offline service worker** with real dead-zone coverage (confirmed useful
+  for e.g. a canyon hike or a dawn balloon launch with no signal) — deploy-
+  version-tied auto-invalidating cache, not just a static precache list.
+  *(santafe-itinerary — `aripshitadventure` already has its own version of
+  this from this account's earlier work, see task history)*
+- **A floating "live flight card"** on flight days: T-24h through landing,
+  60s auto-refresh plus a manual refresh button once data goes >3 min
+  stale, `pageshow`/`focus`-triggered re-check. Richer than a static status
+  badge. *(santafe-itinerary)*
+- **A "boarding-pass style" ticket card** deriving a host label + booking
+  reference from a stored voucher URL — reusable pattern for any
+  Viator/OpenTable/Resy confirmation, not just flights. *(santafe-itinerary)*
+- **Contingency/branching itinerary tabs** ("Primary Plan" vs. "If X
+  Cancels") for a trip with a real cancellation-contingent structure — a
+  distinct pattern from the single-linear-itinerary shape every other repo
+  assumes. *(fl-business-trip)*
+- **Standalone PDF export**, two different real implementations depending
+  on the need: a vendored PDF.js viewer linking to a pre-made static PDF
+  file (`barrier-island-digital`, `vendor/pdfjs/`), vs. a Python/ReportLab
+  script that *generates* a branded, custom-fonted PDF from the trip data
+  (`fl-business-trip`) — pick based on whether the PDF is a fixed document
+  or needs to be generated from the same data driving the site.
+- **A restaurant menu modal** (bottom-sheet, real dish names/prices sourced
+  from the venue's own site or OpenTable) and a **non-AI "contact your
+  travel agent" modal** (a human-agent contact card with `tel:`/`mailto:`
+  links, no AI backend) — a lightweight alternative to a full AI concierge
+  when one isn't warranted. *(caribbean-escape)*
+- **`prefers-reduced-motion` support and a manual dark-mode toggle**
+  (default light regardless of OS setting) — accessibility/theming not
+  covered anywhere else in this playbook. *(budvienna, caribbean-escape)*
+- **Locally vendored per-attraction photos** instead of hotlinked Unsplash
+  URLs (`budvienna/assets/attractions/`) — a working alternative to §2's
+  hotlink pattern, directly relevant given this sandbox usually can't fetch
+  external images at all (§9's hero/banner note, and the image-attachment
+  lesson in `cloudflare-wiki.md`).
+- **Drag-to-reorder "favorites" cards** with `localStorage` pin persistence
+  and an accessible, keyboard-operable drag handle — from a curated
+  restaurant-directory site rather than a day-by-day itinerary, but the
+  interaction pattern (pointer-drag reorder + persisted order + keyboard
+  fallback) is reusable anywhere a user needs to rank/prioritize a list.
+  *(greenville-dining-guide)*
+- **Privacy: no auth gate on Cloudflare Pages by default** means a public
+  trip site publishes whatever it contains to anyone with the URL.
+  `budvienna` anonymized full traveler names to initials for exactly this
+  reason before going public — ask the user whether real names should
+  appear on a shareable link, don't assume yes by default.
+
+### AI concierge chat — one confirmed gap to close on every future build
+
+`travel-app-components/concierge-chat`'s own notes flag that the shipped
+Maritimes build has **no user-facing hallucination disclaimer** on the chat
+UI — a known, acknowledged gap, not yet fixed anywhere on this account as
+of this survey. Treat "the concierge chat should tell the user its answers
+aren't guaranteed accurate" as a requirement for any new concierge build,
+not optional polish.
+
+### Cloudflare Workers AI cost reality (concierge chat backend)
+
+Concrete numbers from `travel-app-components/concierge-chat`'s notes,
+worth knowing before assuming the shared Worker's AI chat is free at any
+volume: roughly $0.011 per 1,000 neurons; Llama-3.3-70b uses ~5,000–20,000
+neurons per reply; worst-case volume on one trip's chat has been estimated
+around $40. Two known mitigations if that ever matters: downgrade to
+`llama-3.1-8b-instruct`, or cache common answers in KV instead of
+re-generating them per request.
+
+### Flight-verification gotchas (extends the existing FlightAware AeroAPI integration)
+
+`santafe-itinerary` also added `mode=schedules` (a published-timetable
+route/airline/date lookup, alongside the existing live-status endpoint,
+sharing the same `AEROAPI_KEY` and edge cache) — check there before adding
+a second, separate schedules integration. Two real, confirmed bugs already
+found and fixed in that same integration, worth avoiding on any future
+flight-verification feature:
+- **AeroAPI's `scheduled_out` can drift 5–15 minutes from the airline's own
+  officially published time.** Treat the airline-published wall-clock time
+  as ground truth; use AeroAPI only for the live delta/status on top of it,
+  not as the source of the scheduled time itself.
+- **A naive UTC-day-window flight lookup misses an evening-local flight
+  that spills into the next UTC day**, and can show a real flight as
+  "Cancelled" by matching the wrong day's instance entirely. Use a ±12h
+  window around the expected local time instead of a calendar-day
+  boundary, plus an explicit `beyondHorizon` sentinel for AeroAPI's 2-day
+  advance-lookup cap rather than treating "no result" as itself meaningful.
 
 See `docs/cloudflare-wiki.md` for the Cloudflare-platform-specific
 counterpart to this file, including an explicit log of wrong guesses
