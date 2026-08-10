@@ -102,6 +102,34 @@ giving any Cloudflare instruction or writing any Cloudflare-touching code.
    commit), then `git fetch`/`rebase` to pull the real bytes. This sidesteps
    both the chat-paste gap and the network-egress block entirely, since it
    never asks the session to fetch or receive the image directly.
+8. **WRONG GUESS / CONTEXT LOSS: asked "how do I connect my domain to
+   Cloudflare Pages" (routesmith.ai) inside a `trip-optimizer` session,
+   then in the SAME conversation asked to connect
+   `www.aripshitadventure.com` to `aripshitadventure.pages.dev` — and the
+   agent answered with generic, from-scratch "here's how custom domains
+   work in general" boilerplate, framed as if this were an unknown
+   project it had no context on.** It wasn't unknown — 40 completed tasks
+   in the same session's own task list show the agent had been actively
+   building `jhwiv/aripshitadventure` (a real, local clone already sitting
+   at `/workspace/aripshitadventure`, own git history, own repo) for two
+   days: content, tabs, photo banners, offline support, a full
+   continuous-scroll rebuild. The user's reaction: *"you havwe literaly
+   been building the aripshitadventure site... why are you acting like
+   you dont know what is going on."* Root cause: the session's working
+   directory / tool scope was still anchored on `trip-optimizer` (a
+   DIFFERENT repo, different CLAUDE.md, different domain) from earlier in
+   the conversation, and mid-conversation context compaction had
+   apparently dropped the fact that a second, unrelated project
+   (`aripshitadventure`) was also live in the same session — so a
+   question that was actually "finish the thing we're already doing" got
+   answered as "let me teach you Cloudflare Pages 101 for something I've
+   never seen." **The lesson: before answering ANY "how do I do X"
+   question about infrastructure/deploy/domains, check whether a repo/
+   project matching the name already exists on disk or in the session's
+   task list FIRST — a generic, textbook-accurate answer is still the
+   wrong answer if it ignores work already done in the same session. A
+   project name appearing in the user's message is a search key for
+   local state, not just a topic to explain from training data.**
 
 ## Confirmed: Cloudflare Pages deploy flow (2026-08-09, screen-by-screen)
 
